@@ -1,0 +1,204 @@
+# 角色
+你是一位资深且极具想象力的武侠故事创作大师，擅长运用生动形象、扣人心弦的笔触，以{{style}}画风，创作两大武侠高手{{role1}}和{{role2}}在{{scene}}展开激烈对决的精彩故事。深入挖掘两人打斗的原因、详细描绘跌宕起伏的过程及明确结果，在过程描述中，要设计出扣人心弦、精彩纷呈的对招拆招情节，融入贴合人物身份的台词（台词简洁有力、符合武侠调性，不冗余），字数控制在400字左右。
+
+## 核心要求
+1.  当用户给出两大武侠高手名字{{role1}}、{{role2}}以及对决场景{{scene}}时，运用丰富的武侠知识储备和创作灵感，立即创作符合要求的故事。
+2.  故事需具备清晰合理的逻辑架构：明确打斗原因、精彩对决过程、明确结果，融入大量细致的人物动作描写。
+3.  加入必要的台词设计：台词贴合人物身份（如侠客、刀客、掌门等），简洁有力量，贴合打斗节奏，每句台词不超过10字，穿插在动作描写中，避免密集堆砌，符合武侠对决的氛围感。
+4.  输出内容仅为完整故事，无需任何额外说明或标注，直接输出至story变量。
+
+## 故事参考示例（含台词，仅作风格参考，不可照搬）
+月影疏斜，竹林深处，两道身影对峙而立。黑衣刀客「孤鸿」手握玄铁重刀，刃口寒光流转；白衣剑客「云踪」轻抚玉箫剑，剑身嗡鸣如泣。二人目光相撞，孤鸿沉声道：“今日必分胜负！”
+孤鸿率先发难，重刀劈空斩出，刀风撕裂竹叶，如黑龙卷地！云踪足尖轻点竹枝，身形飘忽腾挪，剑尖倏地刺向对方腕脉，朗声道：“痴心妄想！”
+「叮！」刀剑相撞，火花四溅，震得青竹拦腰断裂。孤鸿刀势陡变，旋身连斩三式「裂风斩」，刀气纵横如网，大喝：“受死！”
+云踪疾退十步，忽如鹤影翻飞，玉箫剑化出千重幻影，一招「流云映月」直刺刀网缝隙，轻喝：“破！”
+剑尖擦过孤鸿衣襟，血珠飞溅竹叶。孤鸿怒目圆睁，纵身跃至竹梢，借力俯冲而下，刀势如陨星坠地，吼道：“同归于尽！”
+云踪毫不避让，剑尖轻挑地面竹叶，内力激荡间，叶如飞刃逆空而起，淡声道：“承让了！”
+「锵！」重刀被叶浪阻隔一瞬，云踪剑已穿叶而至，点中孤鸿胸口膻中穴。刀坠地，孤鸿苦笑：“我输了。” 转身隐入竹海，唯余月照青苔，风摇碎影。
+
+## 限制
+- 输出格式：{"story": "你的故事内容"}
+- 只输出与武侠高手对决故事创作相关的内容，拒绝回答无关话题。
+- 故事需包含打斗原因、过程、结果，过程要有精彩对招拆招描述，字数严格控制在400字左右。
+- 台词设计贴合人物身份和打斗节奏，简洁有力，不冗余、不违和，避免密集堆砌。
+
+
+const express = require('express');
+const router = express.Router();
+const { generateStoryOutline, generateShotScript, generateImagePrompts, generateVideoPrompts } = require('../utils/llm');
+const { generateImages, extractImageUrls, getFirstLastFrames } = require('../utils/image');
+const { createVideoTask, pollVideoAndGetUrl, mosaicVideos, addBgmToVideo } = require('../utils/video');
+
+// 主流程接口
+router.post('/generate-full-video', async (req, res) => {
+    try {
+        const { role1, role2, scene, style, bgmKeyword } = req.body;
+
+        // 1. 生成故事大纲
+        const storyOutline = await generateStoryOutline(role1, role2, scene, style);
+        console.log("故事大纲原始输出:", storyOutline);
+        const story = storyOutline.story;
+
+        // 2. 生成分镜脚本
+        const shotScript = await generateShotScript(story);
+        console.log("分镜脚本原始输出:", shotScript);
+        const { scene_detail, roles, shot_lists } = shotScript;
+
+        // 3. 生成图片提示词
+        const imagePromptList  = await generateImagePrompts(shot_lists, scene_detail, roles, style);
+        console.log("图片提示词原始输出:", imagePromptList);
+
+        // 4. 文生图
+        const images = await generateImages(imagePromptList);
+        const imageUrls = extractImageUrls(images);
+
+        // 5. 获取首帧尾帧
+        const { firstFrames, lastFrames } = getFirstLastFrames(imageUrls);
+
+        // 6. 生成视频提示词
+        const videoPromptList = await generateVideoPrompts(imagePromptList);
+        console.log("视频提示词原始输出:", videoPromptList);
+
+        // 7. 批量生成视频（循环）
+        const videoUrls = [];
+
+        for (let i = 0; i < videoPromptList.length; i++) {
+          const taskId = await createVideoTask(
+            videoPromptList[i],
+            firstFrames[i],
+            lastFrames[i]
+          );
+          const videoUrl = await pollVideoAndGetUrl(taskId);
+          videoUrls.push(videoUrl);
+        }
+
+        // 8. 拼接视频
+        const mosaicedVideo = mosaicVideos(videoUrls);
+
+        // 9. 添加BGM
+        const finalVideo = addBgmToVideo(mosaicedVideo, bgmKeyword);
+
+        res.json({
+            success: true,
+            finalVideoUrl: finalVideo,
+            story,
+            imageUrls,
+            videoUrls
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+module.exports = router;
+
+const { ChatOpenAI } = require("@langchain/openai");
+const fs = require("fs/promises");
+const path = require("path");
+const { LLM } = require('../config');
+
+// 初始化 LLM（你指定的 gpt-5.4-high）
+const llm = new ChatOpenAI({
+    apiKey: LLM.API_KEY,
+    configuration: { baseURL: LLM.BASE_URL },
+    modelName: LLM.MODEL_NAME,
+    temperature: 0.7,
+});
+
+// ------------------------------
+// 工具函数：读取 txt 提示词文件
+// ------------------------------
+async function loadPrompt(fileName) {
+    const filePath = path.join(__dirname, "prompts", fileName);
+    return await fs.readFile(filePath, "utf8");
+}
+
+// ------------------------------
+// 1. 生成故事大纲（从 story.txt 读取）
+// ------------------------------
+exports.generateStoryOutline = async (role1, role2, scene, style) => {
+    let template = await loadPrompt("story.txt");
+
+    // 替换 txt 里的变量
+    template = template
+        .replaceAll("{{role1}}", role1)
+        .replaceAll("{{role2}}", role2)
+        .replaceAll("{{scene}}", scene)
+        .replaceAll("{{style}}", style);
+
+    const res = await llm.invoke(template);
+    return JSON.parse(res.content.trim());
+};
+
+// ------------------------------
+// 2. 生成分镜脚本（从 shot.txt 读取）
+// ------------------------------
+exports.generateShotScript = async (story) => {
+    let template = await loadPrompt("shot.txt");
+
+    // 替换 txt 里的变量
+    template = template.replaceAll("{{story}}", story);
+
+    const res = await llm.invoke(template);
+    return JSON.parse(res.content.trim());
+};
+
+// ------------------------------
+// 3. 生成图片提示词（从 image.txt 读取）
+// ------------------------------
+exports.generateImagePrompts = async (shot_lists, scene_detail, roles, style) => {
+    let template = await loadPrompt("image.txt");
+    const imagePromptList = [];
+
+    for (const shot_script of shot_lists) {
+
+        // ✅ 模拟 Coze：对象自动转字符串
+        const shotStr = JSON.stringify(shot_script, null, 2);
+        const rolesStr = JSON.stringify(roles, null, 2);
+        const sceneStr = JSON.stringify(scene_detail, null, 2);
+
+        const prompt = template
+            .replaceAll("{{scene_detail}}", sceneStr)
+            .replaceAll("{{roles}}", rolesStr)
+            .replaceAll("{{shot_script}}", shotStr)
+            .replaceAll("{{style}}", style);
+
+        const res = await llm.invoke(prompt);
+        const json = JSON.parse(res.content.trim());
+        
+        imagePromptList.push(json.imagePrompt);
+    }
+
+    return imagePromptList;
+};
+
+// ------------------------------
+// 4. 视频提示词生成（按相邻成对批处理，输入图片提示词数组，输出数量-1）
+// 输入：imagePromptList = [prompt1, prompt2, prompt3...]
+// 输出：videoPromptList = [prompt1-2, prompt2-3...]
+// ------------------------------
+exports.generateVideoPrompts = async (imagePromptList) => {
+    // 只读取一次模板，避免重复IO
+    let template = await loadPrompt("video.txt");
+
+    const videoPromptList = [];
+
+    // 遍历相邻两个图片提示词（成对处理）
+    for (let i = 0; i < imagePromptList.length - 1; i++) {
+        // 当前循环的两个相邻提示词
+        const currentPrompt = imagePromptList[i];
+        const nextPrompt = imagePromptList[i + 1];
+
+        // 把两个提示词拼接成一段文本，替换模板中的{{prompt}}变量
+        const combinedPrompt = `第一个描述词：${currentPrompt}\n第二个描述词：${nextPrompt}`;
+        const finalTemplate = template.replaceAll("{{image_prompt}}", combinedPrompt);
+
+        // 调用模型生成当前成对的视频提示词
+        const res = await llm.invoke(finalTemplate);
+        const json = JSON.parse(res.content.trim());
+
+        videoPromptList.push(json.videoPrompt || json);
+    }
+
+    return videoPromptList;
+};

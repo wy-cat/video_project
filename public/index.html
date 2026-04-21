@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>视频生成工具</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>AI视频生成系统</h1>
+        
+        <div class="form-section">
+            <div class="input-group">
+                <label>角色1 (role1):</label>
+                <input type="text" id="role1" value="白衣佩剑女侠" placeholder="输入角色1">
+            </div>
+            <div class="input-group">
+                <label>角色2 (role2):</label>
+                <input type="text" id="role2" value="黑衣刺刀蒙面男" placeholder="输入角色2">
+            </div>
+            <div class="input-group">
+                <label>场景 (scene):</label>
+                <input type="text" id="scene" value="比武擂台" placeholder="输入场景">
+            </div>
+            <div class="input-group">
+                <label>风格 (style):</label>
+                <input type="text" id="style" value="国漫风" placeholder="输入风格">
+            </div>
+            <div class="input-group">
+                <label>BGM关键词:</label>
+                <input type="text" id="bgm" value="热血" placeholder="输入BGM关键词">
+            </div>
+            <button id="generateBtn">开始生成</button>
+        </div>
+
+        <div class="progress-section" id="progressSection" style="display: none;">
+            <h3>生成进度</h3>
+            
+            <!-- 进度条节点 -->
+            <div class="progress-nodes">
+                <div class="progress-node" data-step="1">
+                    <div class="node-circle">1</div>
+                    <div class="node-label">生成故事</div>
+                </div>
+                <div class="progress-node" data-step="2">
+                    <div class="node-circle">2</div>
+                    <div class="node-label">分镜脚本</div>
+                </div>
+                <div class="progress-node" data-step="3">
+                    <div class="node-circle">3</div>
+                    <div class="node-label">图片提示词</div>
+                </div>
+                <div class="progress-node" data-step="4">
+                    <div class="node-circle">4</div>
+                    <div class="node-label">生成图片</div>
+                </div>
+                <div class="progress-node" data-step="5">
+                    <div class="node-circle">5</div>
+                    <div class="node-label">视频提示词</div>
+                </div>
+                <div class="progress-node" data-step="6">
+                    <div class="node-circle">6</div>
+                    <div class="node-label">生成视频</div>
+                </div>
+                <div class="progress-node" data-step="7">
+                    <div class="node-circle">7</div>
+                    <div class="node-label">拼接视频</div>
+                </div>
+                <div class="progress-node" data-step="8">
+                    <div class="node-circle">8</div>
+                    <div class="node-label">添加BGM</div>
+                </div>
+            </div>
+
+            <!-- 步骤输出区域 -->
+            <div id="stepOutputSection" class="step-output-section">
+                <h4>步骤输出</h4>
+                <div id="stepOutputCards" class="step-output-cards"></div>
+                <div id="stepOutputContent" class="step-output-content">
+                    <p style="color: #999; text-align: center;">等待步骤完成...</p>
+                </div>
+            </div>
+
+            <div id="progressLog"></div>
+        </div>
+
+        <div class="result-section" id="resultSection" style="display: none;">
+            <h3>生成结果</h3>
+            <video id="finalVideo" controls style="width: 100%; max-width: 800px;"></video>
+            <a id="downloadLink" href="" download>下载视频</a>
+        </div>
+
+        <div class="task-history-section" id="taskHistorySection">
+            <h3>任务历史</h3>
+            <button id="refreshTasksBtn">刷新任务列表</button>
+            <button id="clearCacheBtn" style="background-color: #dc3545;">清空所有缓存</button>
+            <div id="tasksList" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

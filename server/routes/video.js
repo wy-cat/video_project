@@ -4,6 +4,78 @@ const { generateStoryOutline, generateShotScript, generateImagePrompts, generate
 const { generateImages, getFirstLastFrames } = require('../utils/image');
 const { generateVideos, mosaicVideos, addBgmToVideo } = require('../utils/video');
 const { generateTaskId, saveTask, getTask, getStepData, getAllTasks, deleteTask } = require('../utils/cache');
+const { waitForUserConfirmation, confirmStep, getWaitingTasks } = require('../utils/stepConfirmation');
+
+
+// ==============================
+// 删除任务接口
+// ==============================
+router.delete('/task/:taskId', async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        await deleteTask(taskId);
+
+        res.json({
+            success: true,
+            message: '任务已删除'
+        });
+    } catch (error) {
+        console.error('❌ 删除任务失败:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==============================
+// 确认步骤继续执行接口
+// ==============================
+router.post('/confirm-step', async (req, res) => {
+    try {
+        const { taskId, step } = req.body;
+        
+        if (!taskId || !step) {
+            return res.status(400).json({ 
+                success: false, 
+                error: '缺少taskId或step参数' 
+            });
+        }
+        
+        console.log(`📥 收到确认请求: taskId=${taskId}, step=${step}`);
+        
+        // ���发步骤继续执行
+        const success = confirmStep(taskId, step);
+        
+        if (success) {
+            res.json({
+                success: true,
+                message: `步骤${step}已确认，继续执行`
+            });
+        } else {
+            res.status(404).json({
+                success: false,
+                error: `步骤${step}不在等待状态`
+            });
+        }
+    } catch (error) {
+        console.error('❌ 确认步骤失败:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==============================
+// 获取等待中的任务列表接口
+// ==============================
+router.get('/waiting-tasks', async (req, res) => {
+    try {
+        const waitingTasks = getWaitingTasks();
+        res.json({
+            success: true,
+            tasks: waitingTasks
+        });
+    } catch (error) {
+        console.error('❌ 获取等待任务失败:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 // ==============================
 // 进度事件发送函数
@@ -144,6 +216,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
 
             console.log('📄 故事内容:', story);
             sendProgress(res, 1, '✅ 故事大纲生成完成！！！', 15, { story });
+
+            // 等待用户确认
+            sendProgress(res, 1, '⏸️ 等待用户确认...', 15, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 2 
+            });
+            await waitForUserConfirmation(taskId, 1, res);
+            sendProgress(res, 1, '▶️ 用户已确认，继续执行...', 15);
         } else {
             sendProgress(res, 1, '⏭️ 跳过步骤1（使用缓存数据）', 15);
             const cachedData = await getStepData(taskId, 1);
@@ -164,6 +245,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
 
             console.log('📍 分镜脚本:', shotScript);
             sendProgress(res, 2, '✅ 分镜脚本生成完成！！！', 25, { shotScript });
+
+            // 等待用户确认
+            sendProgress(res, 2, '⏸️ 等待用户确认...', 25, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 3 
+            });
+            await waitForUserConfirmation(taskId, 2, res);
+            sendProgress(res, 2, '▶️ 用户已确认，继续执行...', 25);
         } else {
             sendProgress(res, 2, '⏭️ 跳过步骤2（使用缓存数据）', 25);
             const cachedData = await getStepData(taskId, 2);
@@ -184,6 +274,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
 
             console.log('🖼️ 图片提示词:', imagePromptList);
             sendProgress(res, 3, '✅ 图片提示词生成完成！！！', 35, { imagePromptList });
+
+            // 等待用户确认
+            sendProgress(res, 3, '⏸️ 等待用户确认...', 35, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 4 
+            });
+            await waitForUserConfirmation(taskId, 3, res);
+            sendProgress(res, 3, '▶️ 用户已确认，继续执行...', 35);
         } else {
             sendProgress(res, 3, '⏭️ 跳过步骤3（使用缓存数据）', 35);
             const cachedData = await getStepData(taskId, 3);
@@ -245,6 +344,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
 
             console.log('🎨 生成图片urls:', imageUrls);
             sendProgress(res, 4, '✅ 图片生成完成！！！', 50, { imageUrls, imagePromptList });
+
+            // 等待用户确认
+            sendProgress(res, 4, '⏸️ 等待用户确认...', 50, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 5 
+            });
+            await waitForUserConfirmation(taskId, 4, res);
+            sendProgress(res, 4, '▶️ 用户已确认，继续执行...', 50);
         } else {
             sendProgress(res, 4, '⏭️ 跳过步骤4（使用缓存数据）', 50);
             const cachedData = await getStepData(taskId, 4);
@@ -264,6 +372,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
 
             console.log('🎬 视频提示词:', videoPromptList);
             sendProgress(res, 5, '✅ 视频提示词生成完成！！！', 60, { videoPromptList });
+
+            // 等待用户确认
+            sendProgress(res, 5, '⏸️ 等待用户确认...', 60, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 6 
+            });
+            await waitForUserConfirmation(taskId, 5, res);
+            sendProgress(res, 5, '▶️ 用户已确认，继续执行...', 60);
         } else {
             sendProgress(res, 5, '⏭️ 跳过步骤5（使用缓存数据）', 60);
             const cachedData = await getStepData(taskId, 5);
@@ -336,6 +453,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
             console.log('✅ 所有视频生成完成');
             console.log('📹 生成视频数量:', videoUrls.length);
             sendProgress(res, 6, '✅ 视频生成完成！！！', 75, { videoUrls, videoPromptList, firstFrames, lastFrames });
+
+            // 等待用户确认
+            sendProgress(res, 6, '⏸️ 等待用户确认...', 75, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 7 
+            });
+            await waitForUserConfirmation(taskId, 6, res);
+            sendProgress(res, 6, '▶️ 用户已确认，继续执行...', 75);
         } else {
             sendProgress(res, 6, '⏭️ 跳过步骤6（使用缓存数据）', 75);
             const cachedData = await getStepData(taskId, 6);
@@ -356,6 +482,15 @@ router.get('/generate-full-video-stream', async (req, res) => {
             console.log('✅ 视频拼接完成');
             console.log('🎬 拼接后视频:', mosaicedVideo);
             sendProgress(res, 7, '✅ 视频拼接完成', 90);
+
+            // 等待用户确认
+            sendProgress(res, 7, '⏸️ 等待用户确认...', 90, { 
+                waitingForConfirmation: true,
+                taskId,
+                nextStep: 8 
+            });
+            await waitForUserConfirmation(taskId, 7, res);
+            sendProgress(res, 7, '▶️ 用户已确认，继续执行...', 90);
         } else {
             sendProgress(res, 7, '⏭️ 跳过步骤7（使用缓存数据）', 90);
             const cachedData = await getStepData(taskId, 7);

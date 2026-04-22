@@ -72,6 +72,40 @@ router.delete('/task/:taskId', async (req, res) => {
 });
 
 // ==============================
+// 更新任务步骤数据接口
+// ==============================
+router.put('/task/:taskId/step/:stepNum', async (req, res) => {
+    try {
+        const { taskId, stepNum } = req.params;
+        const { data } = req.body;
+        
+        if (!data) {
+            return res.status(400).json({ success: false, error: '缺少data参数' });
+        }
+        
+        // 获取任务
+        const task = await getTask(taskId);
+        if (!task) {
+            return res.status(404).json({ success: false, error: '任务不存在' });
+        }
+        
+        // 更新步骤数据
+        const step = parseInt(stepNum);
+        await saveTask(taskId, task.inputs, step, data);
+        
+        console.log(`✅ 任务 ${taskId} 的步骤 ${step} 已更新`);
+        
+        res.json({
+            success: true,
+            message: '步骤数据已更新'
+        });
+    } catch (error) {
+        console.error('❌ 更新步骤数据失败:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ==============================
 // SSE 实时进度接口（支持断点续传）
 // 功能：通过 Server-Sent Events 实时推送生成进度
 // 参数：taskId（任务ID）, startStep（从第几步开始，默认1）

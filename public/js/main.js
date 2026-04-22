@@ -1,8 +1,10 @@
 // ==============================
 // 步骤输出管理
 // ==============================
-let stepOutputs = {}; // 存储每个步骤的输出内容
+let stepOutputs = {}; // 存储每个步骤的输出内容（HTML格式）
+let stepRawData = {}; // 存储每个步骤的原始数据（用于编辑）
 let currentSelectedStep = null;
+let isEditing = false; // 当前是否处于编辑状态
 
 const STEP_LABELS = {
     1: '生成故事',
@@ -19,6 +21,8 @@ function addStepOutput(step, content, result = null, autoSelect = true) {
     let displayContent = content;
     if (result) {
         displayContent = formatStepResult(step, result);
+        // 保存原始数据用于编辑
+        stepRawData[step] = result;
     }
     
     stepOutputs[step] = displayContent;
@@ -77,16 +81,9 @@ function formatShotScriptResult(result) {
         html += '<ul>';
         roles.forEach(role => {
             // 处理不同的角色数据结构
-            const roleName = role.角色名 || role.name || '未知角色';
-            const roleDesc = role.外貌 || role.description || role.气质 || '';
-            const roleWeapon = role.兵器 || role.weapon || '';
-            const roleGender = role.性别 || role.gender || '';
+            const roleDesc = role;
             
-            html += `<li><strong>${roleName}</strong>`;
-            if (roleGender) html += ` (${roleGender})`;
-            if (roleDesc) html += `: ${roleDesc}`;
-            if (roleWeapon) html += ` | 兵器: ${roleWeapon}`;
-            html += `</li>`;
+            html += `<li>${roleDesc}</li>`;
         });
         html += '</ul>';
     } else {
@@ -303,6 +300,7 @@ function updateStepCards() {
 
 function selectStepCard(step) {
     currentSelectedStep = step;
+    isEditing = false; // 切换步骤时退出编辑状态
     
     // 更新卡片高亮
     document.querySelectorAll('.step-card').forEach(card => {
@@ -313,13 +311,191 @@ function selectStepCard(step) {
     });
     
     // 显示对应内容
+    renderStepContent(step);
+}
+
+// 渲染步骤内容（包含编辑按钮）
+function renderStepContent(step) {
     const contentContainer = document.getElementById('stepOutputContent');
     const content = stepOutputs[step];
+    const rawData = stepRawData[step];
     
-    if (content) {
-        contentContainer.innerHTML = `<pre>${content}</pre>`;
-    } else {
+    if (!content) {
         contentContainer.innerHTML = '<p style="color: #999; text-align: center;">暂无输出内容</p>';
+        return;
+    }
+    
+    // 判断该步骤是否支持编辑（步骤1、2、3、6支持编辑文本内容）
+    const isEditable = [1, 2, 3, 6].includes(Number(step));
+    
+    let html = '';
+    
+    // 添加头部（标���和操作按钮）
+    html += '<div class="step-output-header">';
+    html += `<div class="step-output-title">${STEP_LABELS[step]}</div>`;
+    
+    if (isEditable && rawData) {
+        html += '<div class="step-output-actions">';
+        if (!isEditing) {
+            html += `<button class="edit-btn" onclick="enterEditMode(${step})">✏️ 编辑</button>`;
+        } else {
+            html += `<button class="save-btn" onclick="saveEdit(${step})">💾 保存</button>`;
+            html += `<button class="cancel-btn" onclick="cancelEdit(${step})">❌ 取消</button>`;
+        }
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    
+    // 添加内容区域
+    html += '<div class="step-output-body">';
+    if (isEditing) {
+        // 编辑模式：显示文本框
+        const editableText = getEditableText(step, rawData);
+        html += `<textarea id="editTextarea" rows="15">${escapeHtmlForTextarea(editableText)}</textarea>`;
+    } else {
+        // 查看模式：显示格式化内容
+        html += `<pre>${content}</pre>`;
+    }
+    html += '</div>';
+    
+    contentContainer.innerHTML = html;
+}
+
+// 获取可编辑的文本内容
+function getEditableText(step, rawData) {
+    const stepNum = Number(step);
+    
+    switch(stepNum) {
+        case 1: // 故事
+            return rawData.story || '';
+        case 2: // 分镜脚本
+            return JSON.stringify(rawData.shotScript, null, 2);
+        case 3: // 图片提示词
+            return (rawData.imagePromptList || []).join('\n\n---\n\n');
+        case 6: // 视频提示词
+            return (rawData.videoPromptList || []).join('\n\n---\n\n');
+        default:
+            return JSON.stringify(rawData, null, 2);
+    }
+}
+
+// 转义HTML用于textarea
+function escapeHtmlForTextarea(text) {
+    if (!text) return '';
+    return text.replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#039;');
+}
+
+// 进入编辑模式
+function enterEditMode(step) {
+    isEditing = true;
+    renderStepContent(step);
+}
+
+// 取消编辑
+function cancelEdit(step) {
+    isEditing = false;
+    renderStepContent(step);
+}
+
+// 保存编辑
+async function saveEdit(step) {
+    const textarea = document.getElementById('editTextarea');
+    if (!textarea) return;
+    
+    const newText = textarea.value;
+    const stepNum = Number(step);
+    
+    try {
+        // 解析编辑后的内容
+        let updatedData = null;
+        
+        switch(stepNum) {
+            case 1: // 故事
+                updatedData = { story: newText };
+                break;
+            case 2: // 分镜脚本
+                try {
+                    const parsed = JSON.parse(newText);
+                    updatedData = { shotScript: parsed };
+                } catch (e) {
+                    alert('分镜脚本格式错误，请确保是有效的JSON格式');
+                    return;
+                }
+                break;
+            case 3: // 图片提示词
+                const imagePrompts = newText.split(/\n\s*---\s*\n/).map(p => p.trim()).filter(p => p);
+                updatedData = { imagePromptList: imagePrompts };
+                break;
+            case 6: // 视频提示词
+                const videoPrompts = newText.split(/\n\s*---\s*\n/).map(p => p.trim()).filter(p => p);
+                updatedData = { videoPromptList: videoPrompts };
+                break;
+            default:
+                alert('该步骤不支持编辑');
+                return;
+        }
+        
+        // 更新本地数据
+        stepRawData[step] = updatedData;
+        stepOutputs[step] = formatStepResult(step, updatedData);
+        
+        // 调用后端API更新缓存
+        await updateStepCache(step, updatedData);
+        
+        // 退出编辑模式
+        isEditing = false;
+        renderStepContent(step);
+        
+        alert('✅ 保存成功！内容已更新到缓存');
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败: ' + error.message);
+    }
+}
+
+// 更新步骤缓存到后端
+async function updateStepCache(step, data) {
+    try {
+        // 获取当前任务ID
+        const tasksResponse = await fetch('http://localhost:3001/api/video/tasks');
+        const tasksData = await tasksResponse.json();
+        
+        if (!tasksData.success || tasksData.tasks.length === 0) {
+            throw new Error('没有找到当前任务');
+        }
+        
+        const taskId = tasksData.tasks[0].taskId;
+        
+        // 将前端步骤号映射回后端步骤号
+        let backendStep = Number(step);
+        if (backendStep >= 6) {
+            backendStep = backendStep + 1; // 步骤6及以后需要+1（因为后端有步骤5）
+        }
+        
+        // 调用更新API
+        const response = await fetch(`http://localhost:3001/api/video/task/${taskId}/step/${backendStep}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ data })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            throw new Error(result.error || '更新失败');
+        }
+        
+        console.log('✅ 缓存已更新到后端');
+    } catch (error) {
+        console.error('更新缓存失败:', error);
+        throw error;
     }
 }
 

@@ -19,3 +19,11 @@ eg:
 为了提高视频生成的高可用性和灵活性，我希望在主步骤中，争对- 步骤1: 生成故事， - 步骤2: 分镜脚本，- 步骤3: 图片提示词 ，  - 步骤4: 生成图片 ，- 步骤5: 视频提示词 ，- 步骤6: 生成视频 ，- 步骤7: 拼接视频 这几个步骤，每生成一个步骤，都立即停止下来，
 
 能否将这一部分的逻辑融合到可视化展示功能的卡片中，每次打开，能够直接加载历史任务，并将已经生成的步骤直接加载到卡片中。
+
+
+git add .   //暂存所有更改
+git commit -m "first commit"   //对此次更改添加注释/修改说明
+git branch -M main  //
+git remote add origin https://github.com/wy-cat/video_project.git 或者
+git remote set-url origin https://github.com/wy-cat/video_project.git    //连接本地与远程仓库
+git push -u origin main  //推送本地暂存文件到远程仓库

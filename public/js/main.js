@@ -1255,7 +1255,7 @@ async function loadLatestTaskCache() {
 }
 
 // ==============================
-// 显示"继续下一步"按钮
+// 显示"继续下一步"按钮（在任务列表底部）
 // ==============================
 function showContinueButton(taskId, currentStep, nextStep) {
     // 移除已存在的继续按钮
@@ -1264,68 +1264,42 @@ function showContinueButton(taskId, currentStep, nextStep) {
         existingBtn.remove();
     }
     
-    // 创建继续按钮容器
+    // 在任务列表底部创建继续按钮
+    const tasksList = document.getElementById('tasksList');
     const btnContainer = document.createElement('div');
     btnContainer.id = 'continueStepBtn';
     btnContainer.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 10000;
-        background: white;
-        padding: 30px;
+        margin-top: 20px;
+        padding: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-radius: 10px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
         text-align: center;
-        min-width: 400px;
+        color: white;
     `;
     
     btnContainer.innerHTML = `
-        <div style="margin-bottom: 20px;">
-            <div style="font-size: 48px; margin-bottom: 10px;">⏸️</div>
-            <h3 style="margin: 0 0 10px 0; color: #333;">步骤 ${currentStep} 已完成</h3>
-            <p style="margin: 0; color: #666; font-size: 14px;">
-                ${STEP_LABELS[currentStep]} 已生成完成<br>
-                请核对内容，确认无误后继续下一步
+        <div style="margin-bottom: 15px;">
+            <h3 style="margin: 0 0 10px 0;">⏸️ 步骤 ${currentStep} 已完成</h3>
+            <p style="margin: 0; font-size: 14px; opacity: 0.9;">
+                ${STEP_LABELS[currentStep]} 已生成完成，请核对内容后继续
             </p>
         </div>
         <button id="confirmContinueBtn" style="
             padding: 12px 40px;
             font-size: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+            background: white;
+            color: #667eea;
             border: none;
             border-radius: 25px;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-            transition: all 0.3;
             font-weight: bold;
+            transition: all 0.3s;
         " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-            ✅ 继续下一步 (步骤 ${nextStep})
+            ▶️ 继续下一步(${nextStep})
         </button>
-        <div style="margin-top: 15px;">
-            <small style="color: #999;">
-                提示：您可以在左侧查看和编辑当前步骤的输出内容
-            </small>
-        </div>
     `;
     
-    // 添加遮罩层
-    const overlay = document.createElement('div');
-    overlay.id = 'continueStepOverlay';
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 9999;
-    `;
-    
-    document.body.appendChild(overlay);
-    document.body.appendChild(btnContainer);
+    tasksList.appendChild(btnContainer);
     
     // 绑定点击事件
     document.getElementById('confirmContinueBtn').addEventListener('click', async () => {
@@ -1357,8 +1331,7 @@ function showContinueButton(taskId, currentStep, nextStep) {
             
             console.log(`✅ 步骤${currentStep}已确认，继续执行步骤${nextStep}`);
             
-            // 移除按钮和遮罩
-            overlay.remove();
+            // 移除按钮
             btnContainer.remove();
             
         } catch (error) {
@@ -1369,8 +1342,8 @@ function showContinueButton(taskId, currentStep, nextStep) {
             const btn = document.getElementById('confirmContinueBtn');
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = `✅ 继续下一步 (步骤 ${nextStep})`;
-                btn.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                btn.innerHTML = `▶️ 继续下一步(${nextStep})`;
+                btn.style.background = 'white';
                 btn.style.cursor = 'pointer';
             }
         }

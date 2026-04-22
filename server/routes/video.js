@@ -38,11 +38,11 @@ router.get('/task/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
         const task = await getTask(taskId);
-        
+
         if (!task) {
             return res.status(404).json({ success: false, error: '任务不存在' });
         }
-        
+
         res.json({
             success: true,
             task: task
@@ -60,7 +60,7 @@ router.delete('/task/:taskId', async (req, res) => {
     try {
         const { taskId } = req.params;
         await deleteTask(taskId);
-        
+
         res.json({
             success: true,
             message: '任务已删除'
@@ -78,23 +78,23 @@ router.put('/task/:taskId/step/:stepNum', async (req, res) => {
     try {
         const { taskId, stepNum } = req.params;
         const { data } = req.body;
-        
+
         if (!data) {
             return res.status(400).json({ success: false, error: '缺少data参数' });
         }
-        
+
         // 获取任务
         const task = await getTask(taskId);
         if (!task) {
             return res.status(404).json({ success: false, error: '任务不存在' });
         }
-        
+
         // 更新步骤数据
         const step = parseInt(stepNum);
         await saveTask(taskId, task.inputs, step, data);
-        
+
         console.log(`✅ 任务 ${taskId} 的步骤 ${step} 已更新`);
-        
+
         res.json({
             success: true,
             message: '步骤数据已更新'
@@ -120,7 +120,7 @@ router.get('/generate-full-video-stream', async (req, res) => {
         // 解析请求参数
         const { role1, role2, scene, style, bgmKeyword, taskId: existingTaskId, startStep } = req.query;
         const startStepNum = parseInt(startStep) || 1;
-        
+
         console.log('📝 接收参数:', { role1, role2, scene, style, bgmKeyword, existingTaskId, startStep: startStepNum });
 
         // 生成或使用现有任务ID
@@ -178,10 +178,10 @@ router.get('/generate-full-video-stream', async (req, res) => {
         if (startStepNum <= 3) {
             sendProgress(res, 3, '正在生成图片提示词...', 30);
             imagePromptList = await generateImagePrompts(shot_lists, scene_detail, roles, style);
-            
+
             // 保存图片提示词到缓存
             await saveTask(taskId, inputs, 3, { imagePromptList });
-            
+
             console.log('🖼️ 图片提示词:', imagePromptList);
             sendProgress(res, 3, '✅ 图片提示词生成完成！！！', 35, { imagePromptList });
         } else {
@@ -192,20 +192,20 @@ router.get('/generate-full-video-stream', async (req, res) => {
         }
 
         // ==============================
-        // 步骤4: 文生图（支持断点续传）
+        // 步骤4: 文生图并提取首尾帧（支持断点续传）
         // ==============================
         if (startStepNum <= 4) {
             sendProgress(res, 4, '正在生成图片...', 40);
-            
+
             const cachedStep4 = await getStepData(taskId, 4);
             const cachedImageUrls = Array.isArray(cachedStep4?.imageUrls) ? cachedStep4.imageUrls : [];
-            
+
             // 初始化 imageUrls 数组，用缓存的 URL 填充已完成的位置
             imageUrls = new Array(imagePromptList.length);
             for (let i = 0; i < cachedImageUrls.length; i++) {
                 imageUrls[i] = cachedImageUrls[i];
             }
-            
+
             // 找出所有未完成的位置
             const pendingJobs = [];
             for (let i = 0; i < imagePromptList.length; i++) {
@@ -213,105 +213,93 @@ router.get('/generate-full-video-stream', async (req, res) => {
                     pendingJobs.push({ prompt: imagePromptList[i], index: i });
                 }
             }
-            
+
             // 如果有缓存，显示进度
             if (cachedImageUrls.length > 0) {
                 console.log(`♻️ 已缓存图片 ${cachedImageUrls.filter(Boolean).length}/${imagePromptList.length} 张，继续补齐缺失部分`);
             }
-            
+
             // 生成缺失的图片
-             if (pendingJobs.length > 0) {
-                 console.log(`📊 需要生成 ${pendingJobs.length} 张图片`);
-                 const pendingPrompts = pendingJobs.map(item => item.prompt);
-                 
-                 await generateImages(pendingPrompts, {
-                     onItemSuccess: async (item, idx) => {
-                         // idx 是在 pendingPrompts 中的索引，需要映射到原始索引
-                         const originalIndex = pendingJobs[idx].index;
-                         imageUrls[originalIndex] = item.imageUrl;
-                         // 每张成功后立即保存缓存
-                         await saveTask(taskId, inputs, 4, { imageUrls: [...imageUrls] });
-                         console.log(`💾 图片缓存已增量保存: ${originalIndex + 1}/${imagePromptList.length}`);
-                         sendProgress(res, 4, `生成图片 ${originalIndex + 1}/${imagePromptList.length}...`, 40 + (originalIndex / imagePromptList.length) * 5);
-                     }
-                 });
-             } else {
-                 console.log('✅ 所有图片已缓存，无需重新生成');
-             }
-            
+            if (pendingJobs.length > 0) {
+                console.log(`📊 需要生成 ${pendingJobs.length} 张图片`);
+                const pendingPrompts = pendingJobs.map(item => item.prompt);
+
+                await generateImages(pendingPrompts, {
+                    onItemSuccess: async (item, idx) => {
+                        // idx 是在 pendingPrompts 中的索引，需要映射到原始索引
+                        const originalIndex = pendingJobs[idx].index;
+                        imageUrls[originalIndex] = item.imageUrl;
+                        // 每张成功后立即保存缓存
+                        await saveTask(taskId, inputs, 4, { imageUrls: [...imageUrls] });
+                        console.log(`💾 图片缓存已增量保存: ${originalIndex + 1}/${imagePromptList.length}`);
+                        sendProgress(res, 4, `生成图片 ${originalIndex + 1}/${imagePromptList.length}...`, 40 + (originalIndex / imagePromptList.length) * 5);
+                    }
+                });
+
+            } else {
+                console.log('✅ 所有图片已缓存，无需重新生成');
+            }
+
+            // 保存图片到缓存（不保存首尾帧）
+            await saveTask(taskId, inputs, 4, { imageUrls: [...imageUrls] });
+
             console.log('🎨 生成图片urls:', imageUrls);
-            sendProgress(res, 4, '✅ 图片生成完成！！！', 45, { imageUrls, imagePromptList });
+            sendProgress(res, 4, '✅ 图片生成完成！！！', 50, { imageUrls, imagePromptList });
         } else {
-            sendProgress(res, 4, '⏭️ 跳过步骤4（使用缓存数据）', 45);
+            sendProgress(res, 4, '⏭️ 跳过步骤4（使用缓存数据）', 50);
             const cachedData = await getStepData(taskId, 4);
             imageUrls = cachedData?.imageUrls;
             if (!imageUrls) throw new Error('缓存中找不到图片URL数据');
         }
 
         // ==============================
-        // 步骤5: 获取首帧尾帧
+        // 步骤5: 生成视频提示词
         // ==============================
         if (startStepNum <= 5) {
-            sendProgress(res, 5, '正在提取首帧尾帧...', 50);
-            ({ firstFrames, lastFrames } = getFirstLastFrames(imageUrls));
-
-            // 保存首尾帧到缓存
-            await saveTask(taskId, inputs, 5, { firstFrames, lastFrames });
-
-            console.log('🎞️ 首帧数组:', firstFrames);
-            console.log('🎞️ 尾帧数组:', lastFrames);
-            sendProgress(res, 5, '✅ 首帧尾帧提取完成！！！', 55);
-        } else {
-            sendProgress(res, 5, '⏭️ 跳过步骤5（使用缓存数据）', 55);
-            const cachedData = await getStepData(taskId, 5);
-            firstFrames = cachedData?.firstFrames;
-            lastFrames = cachedData?.lastFrames;
-            if (!firstFrames || !lastFrames) throw new Error('缓存中找不到首尾帧数据');
-        }
-
-        // ==============================
-        // 步骤6: 生成视频提示词
-        // ==============================
-        if (startStepNum <= 6) {
-            sendProgress(res, 6, '正在生成视频提示词...', 60);
+            sendProgress(res, 5, '正在生成视频提示词...', 55);
             videoPromptList = await generateVideoPrompts(imagePromptList);
 
             // 保存视频提示词到缓存
-            await saveTask(taskId, inputs, 6, { videoPromptList });
+            await saveTask(taskId, inputs, 5, { videoPromptList });
 
             console.log('🎬 视频提示词:', videoPromptList);
-            sendProgress(res, 6, '✅ 视频提示词生成完成！！！', 65, { videoPromptList });
+            sendProgress(res, 5, '✅ 视频提示词生成完成！！！', 60, { videoPromptList });
         } else {
-            sendProgress(res, 6, '⏭️ 跳过步骤6（使用缓存数据）', 65);
-            const cachedData = await getStepData(taskId, 6);
+            sendProgress(res, 5, '⏭️ 跳过步骤5（使用缓存数据）', 60);
+            const cachedData = await getStepData(taskId, 5);
             videoPromptList = cachedData?.videoPromptList;
             if (!videoPromptList) throw new Error('缓存中找不到视频提示词数据');
         }
 
         // ==============================
-        // 步骤7: 批量生成视频（支持断点续传）
+        // 步骤6: 批量生成视频（支持断点续传）
         // ==============================
-        if (startStepNum <= 7) {
-            sendProgress(res, 7, '正在生成视频...', 70);
+        if (startStepNum <= 6) {
+            sendProgress(res, 6, '正在生成视频...', 65);
             
-            const cachedStep7 = await getStepData(taskId, 7);
-            const cachedVideoUrls = Array.isArray(cachedStep7?.videoUrls) ? cachedStep7.videoUrls : [];
-            
+            // 从图片URL提取首尾帧（用于视频生成）
+            ({ firstFrames, lastFrames } = getFirstLastFrames(imageUrls));
+            console.log('🎞️ 首帧数组:', firstFrames);
+            console.log('🎞️ 尾帧数组:', lastFrames);
+
+            const cachedStep6 = await getStepData(taskId, 6);
+            const cachedVideoUrls = Array.isArray(cachedStep6?.videoUrls) ? cachedStep6.videoUrls : [];
+
             // 初始化 videoUrls 数组，用缓存的 URL 填充已完成的位置
             videoUrls = new Array(videoPromptList.length);
             for (let i = 0; i < cachedVideoUrls.length; i++) {
                 videoUrls[i] = cachedVideoUrls[i];
             }
-            
+
             // 找出所有未完成的位置
             const pendingVideoJobs = [];
             for (let i = 0; i < videoPromptList.length; i++) {
                 if (!videoUrls[i]) {
-                    pendingVideoJobs.push({ 
-                        prompt: videoPromptList[i], 
-                        firstFrame: firstFrames[i], 
-                        lastFrame: lastFrames[i], 
-                        index: i 
+                    pendingVideoJobs.push({
+                        prompt: videoPromptList[i],
+                        firstFrame: firstFrames[i],
+                        lastFrame: lastFrames[i],
+                        index: i
                     });
                 }
             }
@@ -336,61 +324,61 @@ router.get('/generate-full-video-stream', async (req, res) => {
                         videoUrls[originalIndex] = item.videoUrl;
 
                         // 每个视频成功后立即保存缓存
-                        await saveTask(taskId, inputs, 7, { videoUrls: [...videoUrls] });
+                        await saveTask(taskId, inputs, 6, { videoUrls: [...videoUrls] });
                         console.log(`💾 视频缓存已增量保存: ${originalIndex + 1}/${videoPromptList.length}`);
-                        sendProgress(res, 7, `生成视频 ${originalIndex + 1}/${videoPromptList.length}...`, 70 + (originalIndex / videoPromptList.length) * 10);
+                        sendProgress(res, 6, `生成视频 ${originalIndex + 1}/${videoPromptList.length}...`, 65 + (originalIndex / videoPromptList.length) * 10);
                     }
                 });
             } else {
                 console.log('✅ 所有视频已缓存，无需重新生成');
             }
-            
+
             console.log('✅ 所有视频生成完成');
             console.log('📹 生成视频数量:', videoUrls.length);
-            sendProgress(res, 7, '✅ 视频生成完成！！！', 80, { videoUrls, videoPromptList, firstFrames, lastFrames });
+            sendProgress(res, 6, '✅ 视频生成完成！！！', 75, { videoUrls, videoPromptList, firstFrames, lastFrames });
         } else {
-            sendProgress(res, 7, '⏭️ 跳过步骤7（使用缓存数据）', 80);
-            const cachedData = await getStepData(taskId, 7);
+            sendProgress(res, 6, '⏭️ 跳过步骤6（使用缓存数据）', 75);
+            const cachedData = await getStepData(taskId, 6);
             videoUrls = cachedData?.videoUrls;
             if (!videoUrls) throw new Error('缓存中找不到视频URL数据');
         }
 
         // ==============================
-        // 步骤8: 拼接视频
+        // 步骤7: 拼接视频
         // ==============================
-        if (startStepNum <= 8) {
-            sendProgress(res, 8, '拼接视频...', 85);
+        if (startStepNum <= 7) {
+            sendProgress(res, 7, '拼接视频...', 80);
             mosaicedVideo = await mosaicVideos(videoUrls);
 
             // 保存拼接视频到缓存
-            await saveTask(taskId, inputs, 8, { mosaicedVideo });
+            await saveTask(taskId, inputs, 7, { mosaicedVideo });
 
             console.log('✅ 视频拼接完成');
             console.log('🎬 拼接后视频:', mosaicedVideo);
-            sendProgress(res, 8, '✅ 视频拼接完成', 90);
+            sendProgress(res, 7, '✅ 视频拼接完成', 90);
         } else {
-            sendProgress(res, 8, '⏭️ 跳过步骤8（使用缓存数据）', 90);
-            const cachedData = await getStepData(taskId, 8);
+            sendProgress(res, 7, '⏭️ 跳过步骤7（使用缓存数据）', 90);
+            const cachedData = await getStepData(taskId, 7);
             mosaicedVideo = cachedData?.mosaicedVideo;
             if (!mosaicedVideo) throw new Error('缓存中找不到拼接视频数据');
         }
 
         // ==============================
-        // 步骤9: 添加BGM
+        // 步骤8: 添加BGM
         // ==============================
-        if (startStepNum <= 9) {
-            sendProgress(res, 9, '添加BGM...', 95);
+        if (startStepNum <= 8) {
+            sendProgress(res, 8, '添加BGM...', 95);
             finalVideo = await addBgmToVideo(mosaicedVideo, bgmKeyword);
 
             // 保存最终视频到缓存
-            await saveTask(taskId, inputs, 9, { finalVideo });
+            await saveTask(taskId, inputs, 8, { finalVideo });
 
             console.log('✅ BGM添加完成');
             console.log('🎬 最终视频:', finalVideo);
-            sendProgress(res, 9, '✅ BGM添加完成', 98);
+            sendProgress(res, 8, '✅ BGM添加完成', 98);
         } else {
-            sendProgress(res, 9, '⏭️ 跳过步骤9（使用缓存数据）', 98);
-            const cachedData = await getStepData(taskId, 9);
+            sendProgress(res, 8, '⏭️ 跳过步骤8（使用缓存数据）', 98);
+            const cachedData = await getStepData(taskId, 8);
             finalVideo = cachedData?.finalVideo;
             if (!finalVideo) throw new Error('缓存中找不到最终视频数据');
         }
@@ -399,7 +387,7 @@ router.get('/generate-full-video-stream', async (req, res) => {
         // 发送最终结果
         // ==============================
         console.log('🎉 全部流程完成！');
-        await saveTask(taskId, inputs, 9, { finalVideo });
+        await saveTask(taskId, inputs, 8, { finalVideo });
         res.write(`data: ${JSON.stringify({
             step: 'complete',
             message: '🎉 全部流程完成！',

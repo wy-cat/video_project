@@ -11,11 +11,13 @@ const STEP_LABELS = {
     2: '分镜脚本',
     3: '图片提示词',
     4: '生成图片',
+    5: '视频提示词',
     6: '生成视频',
     7: '拼接视频',
     8: '添加BGM'
 };
 
+// 添加步骤输出并更新显示
 function addStepOutput(step, content, result = null, autoSelect = true) {
     // 如果有result数据，格式化显示
     let displayContent = content;
@@ -34,6 +36,7 @@ function addStepOutput(step, content, result = null, autoSelect = true) {
     }
 }
 
+// 根据步骤和结果数据格式化显示内容
 function formatStepResult(step, result) {
     const stepNum = Number(step);
     
@@ -46,9 +49,9 @@ function formatStepResult(step, result) {
             return formatImagePromptsResult(result);
         case 4: // 生成图片
             return formatImagesResult(result);
-        case 6: // 视频提示词
+        case 5: // 视频提示词
             return formatVideoPromptsResult(result);
-        case 7: // 生成视频
+        case 6: // 生成视频
             return formatVideosResult(result);
         default:
             return JSON.stringify(result, null, 2);
@@ -205,7 +208,7 @@ function escapeHtml(text) {
     return text.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// 显示图片提示词模态框
+// 显示图片提示词模态框（带编辑和重新生成功能）
 function showImagePrompt(index, prompt) {
     const unescapedPrompt = prompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     
@@ -215,10 +218,14 @@ function showImagePrompt(index, prompt) {
         <div class="modal-content">
             <div class="modal-header">
                 <h3>图片 ${index + 1} - 提示词</h3>
-                <button class="modal-close" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+                <div class="modal-header-actions">
+                    <button class="regenerate-btn" onclick="regenerateSingleImage(${index})">🔄 重新生成</button>
+                    <button class="edit-btn" onclick="editImagePrompt(${index}, '${escapeHtml(unescapedPrompt)}')">✏️ 编辑</button>
+                    <button class="modal-close" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">×</button>
+                </div>
             </div>
             <div class="modal-body">
-                <p>${unescapedPrompt}</p>
+                <p id="imagePromptText_${index}">${unescapedPrompt}</p>
             </div>
         </div>
     `;
@@ -232,7 +239,78 @@ function showImagePrompt(index, prompt) {
     document.body.appendChild(modal);
 }
 
-// 显示视频信息模态框（提示词+参考图）
+// 编辑图片提示词
+function editImagePrompt(index, prompt) {
+    const unescapedPrompt = prompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const textElement = document.getElementById(`imagePromptText_${index}`);
+    
+    if (!textElement) return;
+    
+    // 替换为可编辑的textarea
+    textElement.outerHTML = `
+        <div>
+            <textarea id="imagePromptEdit_${index}" rows="8" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${unescapedPrompt}</textarea>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="save-btn" onclick="saveImagePromptEdit(${index})">💾 保存</button>
+                <button class="cancel-btn" onclick="cancelImagePromptEdit(${index}, '${escapeHtml(unescapedPrompt)}')">❌ 取消</button>
+            </div>
+        </div>
+    `;
+}
+
+// 保存图片提示词编辑
+async function saveImagePromptEdit(index) {
+    const textarea = document.getElementById(`imagePromptEdit_${index}`);
+    if (!textarea) return;
+    
+    const newPrompt = textarea.value.trim();
+    if (!newPrompt) {
+        alert('提示词不能为空');
+        return;
+    }
+    
+    try {
+        // 获取当前步骤3的数据
+        const rawData = stepRawData[3];
+        if (!rawData || !rawData.imagePromptList) {
+            throw new Error('找不到图片提示词数据');
+        }
+        
+        // 更新提示词
+        rawData.imagePromptList[index] = newPrompt;
+        
+        // 更新缓存
+        await updateStepCache(3, rawData);
+        
+        // 更新显示
+        stepOutputs[3] = formatStepResult(3, rawData);
+        if (currentSelectedStep == 3) {
+            renderStepContent(3);
+        }
+        
+        // 关闭弹窗
+        document.querySelector('.modal-overlay').remove();
+        
+        alert('✅ 提示词已更新！');
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败: ' + error.message);
+    }
+}
+
+// 取消图片提示词编辑
+function cancelImagePromptEdit(index, originalPrompt) {
+    const unescapedPrompt = originalPrompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const editContainer = document.getElementById(`imagePromptEdit_${index}`).parentElement;
+    editContainer.outerHTML = `<p id="imagePromptText_${index}">${unescapedPrompt}</p>`;
+}
+
+// 重新生成单个图片
+async function regenerateSingleImage(index) {
+    alert('单个图片重新生成功能开发中，当前请使用步骤级别的重新生成');
+}
+
+// 显示视频信息模态框（提示词+参考图+编辑+重新生成）
 function showVideoInfo(index, prompt, firstFrame, lastFrame) {
     const unescapedPrompt = prompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
     
@@ -242,12 +320,16 @@ function showVideoInfo(index, prompt, firstFrame, lastFrame) {
         <div class="modal-content modal-large">
             <div class="modal-header">
                 <h3>视频 ${index + 1} - 详细信息</h3>
-                <button class="modal-close" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
+                <div class="modal-header-actions">
+                    <button class="regenerate-btn" onclick="regenerateSingleVideo(${index})">🔄 重新生成</button>
+                    <button class="edit-btn" onclick="editVideoPrompt(${index}, '${escapeHtml(unescapedPrompt)}')">✏️ 编辑</button>
+                    <button class="modal-close" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()">×</button>
+                </div>
             </div>
             <div class="modal-body">
                 <div class="modal-section">
                     <h4>视频提示词</h4>
-                    <p>${unescapedPrompt}</p>
+                    <p id="videoPromptText_${index}">${unescapedPrompt}</p>
                 </div>
                 <div class="modal-section">
                     <h4>参考图</h4>
@@ -275,6 +357,78 @@ function showVideoInfo(index, prompt, firstFrame, lastFrame) {
     document.body.appendChild(modal);
 }
 
+// 编辑视频提示词
+function editVideoPrompt(index, prompt) {
+    const unescapedPrompt = prompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const textElement = document.getElementById(`videoPromptText_${index}`);
+    
+    if (!textElement) return;
+    
+    // 替换为可编辑的textarea
+    textElement.outerHTML = `
+        <div>
+            <textarea id="videoPromptEdit_${index}" rows="8" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">${unescapedPrompt}</textarea>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button class="save-btn" onclick="saveVideoPromptEdit(${index})">💾 保存</button>
+                <button class="cancel-btn" onclick="cancelVideoPromptEdit(${index}, '${escapeHtml(unescapedPrompt)}')">❌ 取消</button>
+            </div>
+        </div>
+    `;
+}
+
+// 保存视频提示词编辑
+async function saveVideoPromptEdit(index) {
+    const textarea = document.getElementById(`videoPromptEdit_${index}`);
+    if (!textarea) return;
+    
+    const newPrompt = textarea.value.trim();
+    if (!newPrompt) {
+        alert('提示词不能为空');
+        return;
+    }
+    
+    try {
+        // 获取当前步骤6的数据
+        const rawData = stepRawData[6];
+        if (!rawData || !rawData.videoPromptList) {
+            throw new Error('找不到视频提示词数据');
+        }
+        
+        // 更新提示词
+        rawData.videoPromptList[index] = newPrompt;
+        
+        // 更新缓存
+        await updateStepCache(6, rawData);
+        
+        // 更新显示
+        stepOutputs[6] = formatStepResult(6, rawData);
+        if (currentSelectedStep == 6) {
+            renderStepContent(6);
+        }
+        
+        // 关闭弹窗
+        document.querySelector('.modal-overlay').remove();
+        
+        alert('✅ 提示词已更新！');
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败: ' + error.message);
+    }
+}
+
+// 取消视频提示词编辑
+function cancelVideoPromptEdit(index, originalPrompt) {
+    const unescapedPrompt = originalPrompt.replace(/\\'/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const editContainer = document.getElementById(`videoPromptEdit_${index}`).parentElement;
+    editContainer.outerHTML = `<p id="videoPromptText_${index}">${unescapedPrompt}</p>`;
+}
+
+// 重新生成单个视频
+async function regenerateSingleVideo(index) {
+    alert('单个视频重新生成功能开发中，当前请使用步骤级别的重新生成');
+}
+
+// 更新步骤卡片显示（根据stepOutputs数据动态生成卡片）
 function updateStepCards() {
     const cardsContainer = document.getElementById('stepOutputCards');
     cardsContainer.innerHTML = '';
@@ -298,6 +452,7 @@ function updateStepCards() {
     });
 }
 
+// 选择步骤卡片并显示对应内容
 function selectStepCard(step) {
     currentSelectedStep = step;
     isEditing = false; // 切换步骤时退出编辑状态
@@ -325,19 +480,26 @@ function renderStepContent(step) {
         return;
     }
     
-    // 判断该步骤是否支持编辑（步骤1、2、3、6支持编辑文本内容）
-    const isEditable = [1, 2, 3, 6].includes(Number(step));
+    // 判断该步骤是否支持编辑（步骤1、2、3、5支持编辑文本内容）
+    const isEditable = [1, 2, 3, 5].includes(Number(step));
+    // 判断该步骤是否支持重新生成
+    const isRegeneratable = [1, 2, 3, 5].includes(Number(step));
     
     let html = '';
     
-    // 添加头部（标���和操作按钮）
+    // 添加头部（标题和操作按钮）
     html += '<div class="step-output-header">';
     html += `<div class="step-output-title">${STEP_LABELS[step]}</div>`;
     
-    if (isEditable && rawData) {
+    if ((isEditable || isRegeneratable) && rawData) {
         html += '<div class="step-output-actions">';
         if (!isEditing) {
-            html += `<button class="edit-btn" onclick="enterEditMode(${step})">✏️ 编辑</button>`;
+            if (isRegeneratable) {
+                html += `<button class="regenerate-btn" onclick="regenerateStep(${step})">🔄 重新生成</button>`;
+            }
+            if (isEditable) {
+                html += `<button class="edit-btn" onclick="enterEditMode(${step})">✏️ 编辑</button>`;
+            }
         } else {
             html += `<button class="save-btn" onclick="saveEdit(${step})">💾 保存</button>`;
             html += `<button class="cancel-btn" onclick="cancelEdit(${step})">❌ 取消</button>`;
@@ -373,7 +535,7 @@ function getEditableText(step, rawData) {
             return JSON.stringify(rawData.shotScript, null, 2);
         case 3: // 图片提示词
             return (rawData.imagePromptList || []).join('\n\n---\n\n');
-        case 6: // 视频提示词
+        case 5: // 视频提示词
             return (rawData.videoPromptList || []).join('\n\n---\n\n');
         default:
             return JSON.stringify(rawData, null, 2);
@@ -431,7 +593,7 @@ async function saveEdit(step) {
                 const imagePrompts = newText.split(/\n\s*---\s*\n/).map(p => p.trim()).filter(p => p);
                 updatedData = { imagePromptList: imagePrompts };
                 break;
-            case 6: // 视频提示词
+            case 5: // 视频提示词
                 const videoPrompts = newText.split(/\n\s*---\s*\n/).map(p => p.trim()).filter(p => p);
                 updatedData = { videoPromptList: videoPrompts };
                 break;
@@ -455,6 +617,37 @@ async function saveEdit(step) {
     } catch (error) {
         console.error('保存失败:', error);
         alert('保存失败: ' + error.message);
+    }
+}
+
+// 重新生成步骤
+async function regenerateStep(step) {
+    if (!confirm(`确定要重新生成步骤${step}（${STEP_LABELS[step]}）吗？`)) {
+        return;
+    }
+    
+    try {
+        // 获取当前任务ID
+        const tasksResponse = await fetch('http://localhost:3001/api/video/tasks');
+        const tasksData = await tasksResponse.json();
+        
+        if (!tasksData.success || tasksData.tasks.length === 0) {
+            throw new Error('没有找到当前任务');
+        }
+        
+        const taskId = tasksData.tasks[0].taskId;
+        
+        // 将前端步骤号映射回后端步骤号
+        let backendStep = Number(step);
+        if (backendStep >= 6) {
+            backendStep = backendStep + 1;
+        }
+        
+        // 调用continueFromStep从该步骤重新开始
+        await continueFromStep(taskId, backendStep);
+    } catch (error) {
+        console.error('重新生成失败:', error);
+        alert('重新生成失败: ' + error.message);
     }
 }
 
@@ -498,7 +691,7 @@ async function updateStepCache(step, data) {
         throw error;
     }
 }
-
+// 重置步骤输出（例如在开始新任务时调用）
 function resetStepOutputs() {
     stepOutputs = {};
     currentSelectedStep = null;
@@ -509,18 +702,6 @@ function resetStepOutputs() {
 // ==============================
 // 获取所有任务列表
 // ==============================
-const INTERNAL_PROGRESS_STEPS = new Set([5]);
-
-function mapBackendStepToVisibleStep(step) {
-    const stepNum = Number(step);
-
-    if (Number.isNaN(stepNum) || INTERNAL_PROGRESS_STEPS.has(stepNum)) {
-        return null;
-    }
-
-    // 后端的第5步（首尾帧提取）在 UI 中隐藏，因此后续步骤整体前移一位
-    return stepNum > 5 ? stepNum - 1 : stepNum;
-}
 
 async function loadTasksList() {
     try {
@@ -563,42 +744,16 @@ async function loadTasksList() {
                     <div style="margin-bottom: 10px; padding: 8px; background: #e8f4f8; border-radius: 3px;">
                         <div style="font-size: 12px; color: #333; margin-bottom: 6px;"><strong>快速操作:</strong></div>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-                            <button onclick="continueFromStep('${task.taskId}', ${maxStep})" 
-                                    style="padding: 6px 10px; font-size: 11px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                                ⏭️ 从步骤${maxStep}重新开始
+                            <button onclick="loadTaskToStepOutput('${task.taskId}')" 
+                                    style="padding: 6px 10px; font-size: 11px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                                📋 查看任务详情
                             </button>
                             <button onclick="continueFromStep('${task.taskId}', ${maxStep + 1})" 
-                                    style="padding: 6px 10px; font-size: 11px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer;">
+                                    style="padding: 6px 10px; font-size: 11px; background: #28a745; color: white; border: none; border-radius: 3px; cursor: pointer;">
                                 ▶️ 继续下一步(${maxStep + 1})
                             </button>
                         </div>
                     </div>
-                    
-                    <!-- 所有步骤选择 -->
-                    <div style="margin-bottom: 10px; padding: 8px; background: #f0f0f0; border-radius: 3px;">
-                        <div style="font-size: 12px; color: #333; margin-bottom: 6px;"><strong>从任意步骤开始:</strong></div>
-                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-            `;
-            
-            // 为每个步骤添加按钮
-            for (let step = 1; step <= 9; step++) {
-                const isCompleted = task.completedSteps.includes(step);
-                const bgColor = isCompleted ? '#28a745' : '#6c757d';
-                const label = isCompleted ? `✓${step}` : step;
-                
-                html += `
-                    <button onclick="continueFromStep('${task.taskId}', ${step})" 
-                            title="${isCompleted ? '已完成' : '未完成'} - 从步骤${step}开始"
-                            style="padding: 4px 8px; font-size: 11px; background: ${bgColor}; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                        ${label}
-                    </button>
-                `;
-            }
-            
-            html += `
-                        </div>
-                    </div>
-                    
                     <!-- 删除按钮 -->
                     <div style="display: flex; gap: 8px;">
                         <button onclick="deleteTask('${task.taskId}')" 
@@ -726,7 +881,7 @@ async function continueFromStep(taskId, startStep) {
                 updateProgressNode(data.step);
                 
                 // 当步骤完成时（显示✅），添加到步骤输出
-                if (data.message.includes('✅') && !INTERNAL_PROGRESS_STEPS.has(Number(data.step))) {
+                if (data.message.includes('✅')) {
                     addStepOutput(data.step, data.message, data.result);
                 }
             }
@@ -833,6 +988,138 @@ async function clearAllCache() {
 }
 
 // ==============================
+// 加载指定任务到步骤输出
+// ==============================
+async function loadTaskToStepOutput(taskId) {
+    try {
+        console.log('🔄 加载任务到步骤输出:', taskId);
+        
+        // 获取任务详情
+        const taskResponse = await fetch(`http://localhost:3001/api/video/task/${taskId}`);
+        const taskData = await taskResponse.json();
+        
+        if (!taskData.success) {
+            alert('获取任务详情失败');
+            return;
+        }
+        
+        const task = taskData.task;
+        
+        // 清空当前步骤输出
+        resetStepOutputs();
+        
+        // 获取已完成的步骤列表
+        const completedSteps = Object.keys(task.steps || {}).map(Number).filter(n => !isNaN(n));
+        
+        if (completedSteps.length === 0) {
+            alert('该任务没有已完成的步骤');
+            return;
+        }
+        
+        // 显示进度区域
+        document.getElementById('progressSection').style.display = 'block';
+        
+        // 加载每个已完成步骤的数据
+        let firstVisibleStep = null;
+        
+        completedSteps.sort((a, b) => a - b).forEach(step => {
+            const stepInfo = task.steps[step];
+            if (!stepInfo || !stepInfo.data) return;
+            
+            const stepData = stepInfo.data;
+            
+            // 根据步骤类型构建result对象
+            let result = null;
+            
+            switch(step) {
+                case 1:
+                    if (stepData.story) {
+                        result = { story: stepData.story };
+                    }
+                    break;
+                case 2:
+                    if (stepData.shotScript) {
+                        result = { shotScript: stepData.shotScript };
+                    }
+                    break;
+                case 3:
+                    if (stepData.imagePromptList) {
+                        result = { imagePromptList: stepData.imagePromptList };
+                    }
+                    break;
+                case 4:
+                    if (stepData.imageUrls) {
+                        const step3Data = task.steps[3]?.data;
+                        result = { 
+                            imageUrls: stepData.imageUrls,
+                            imagePromptList: step3Data?.imagePromptList || []
+                        };
+                    }
+                    break;
+                case 5:
+                    if (stepData.videoPromptList) {
+                        result = { videoPromptList: stepData.videoPromptList };
+                    }
+                    break;
+                case 6:
+                    if (stepData.videoUrls) {
+                        const step5Data = task.steps[5]?.data;
+                        result = { 
+                            videoUrls: stepData.videoUrls,
+                            videoPromptList: step5Data?.videoPromptList || []
+                        };
+                        // 首尾帧从后端的步骤6结果中获取（后端在生成视频时会提取并返回）
+                        if (stepData.firstFrames && stepData.lastFrames) {
+                            result.firstFrames = stepData.firstFrames;
+                            result.lastFrames = stepData.lastFrames;
+                        }
+                    }
+                    break;
+                case 7:
+                case 8:
+                    // 步骤7（拼接视频）和步骤8（添加BGM）不在前端显示
+                    return;
+            }
+            
+            if (result) {
+                // 确定前端显示的步骤号
+                let visibleStep = step;
+                
+                // 旧格式兼容：步骤6的视频提示词映射到前端步骤5
+                if (step === 6 && stepData.videoPromptList && !stepData.videoUrls) {
+                    visibleStep = 5;
+                }
+                // 旧格式兼容：步骤7的生成视频映射到前端步骤6
+                else if (step === 7 && stepData.videoUrls) {
+                    visibleStep = 6;
+                }
+                
+                addStepOutput(visibleStep, `✅ ${STEP_LABELS[visibleStep]}`, result, false);
+                
+                if (firstVisibleStep === null) {
+                    firstVisibleStep = visibleStep;
+                }
+                
+                const node = document.querySelector(`.progress-node[data-step="${visibleStep}"]`);
+                if (node) {
+                    node.classList.add('completed');
+                }
+            }
+        });
+        
+        // 选中第一个步骤
+        if (firstVisibleStep !== null) {
+            selectStepCard(firstVisibleStep);
+        }
+        
+        console.log(`✅ 已加载任务 ${taskId} 的数据`);
+    } catch (error) {
+        console.error('加载任务失败:', error);
+        alert('加载任务失败: ' + error.message);
+    }
+}
+
+// ==============================
 // 加载最新任务的缓存数据到步骤输出
 // ==============================
 async function loadLatestTaskCache() {
@@ -889,9 +1176,6 @@ async function loadLatestTaskCache() {
         console.log('🔄 开始遍历已完成步骤...');
         completedSteps.sort((a, b) => a - b).forEach(step => {
             console.log(`\n处理步骤 ${step}:`);
-            if (INTERNAL_PROGRESS_STEPS.has(step)) {
-                return; // 跳过内部步骤
-            }
             
             const stepInfo = task.steps[step];
             if (!stepInfo || !stepInfo.data) return;
@@ -948,21 +1232,18 @@ async function loadLatestTaskCache() {
             }
             
             if (result) {
-                const visibleStep = mapBackendStepToVisibleStep(step);
-                if (visibleStep !== null) {
-                    // 不自动选中，只添加到输出列表
-                    addStepOutput(visibleStep, `✅ ${STEP_LABELS[visibleStep]}（从缓存加载）`, result, false);
-                    
-                    // 记录第一个可见步骤
-                    if (firstVisibleStep === null) {
-                        firstVisibleStep = visibleStep;
-                    }
-                    
-                    // 更新进度节点为完成状态
-                    const node = document.querySelector(`.progress-node[data-step="${visibleStep}"]`);
-                    if (node) {
-                        node.classList.add('completed');
-                    }
+                // 不自动选中，只添加到输出列表
+                addStepOutput(step, `✅ ${STEP_LABELS[step]}（从缓存加载）`, result, false);
+                
+                // 记录第一个可见步骤
+                if (firstVisibleStep === null) {
+                    firstVisibleStep = step;
+                }
+                
+                // 更新进度节点为完成状态
+                const node = document.querySelector(`.progress-node[data-step="${step}"]`);
+                if (node) {
+                    node.classList.add('completed');
                 }
             }
         });
@@ -1101,21 +1382,18 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
             // 更新进度条
             updateProgressBar(data.percentage);
             
-            // 更新进度节点
-            const visibleStep = mapBackendStepToVisibleStep(data.step);
-            if (visibleStep !== null) {
-                updateProgressNode(visibleStep);
+            // 更新进度节点和步骤输出
+            if (data.step && data.step !== 'complete' && data.step !== 'error') {
+                updateProgressNode(data.step);
                 
                 // 当步骤完成时（显示✅），添加到步骤输出
                 if (data.message.includes('✅')) {
-                    addStepOutput(visibleStep, data.message, data.result);
+                    addStepOutput(data.step, data.message, data.result);
                 }
             }
             
-            // 输出日志：隐藏内部步骤5（首尾帧提取），不在UI进度中单独展示
-            if (!INTERNAL_PROGRESS_STEPS.has(Number(data.step))) {
-                log(data.message);
-            }
+            // 输出日志
+            log(data.message);
 
             // 如果完成或出错，关��连接
             if (data.step === 'complete') {

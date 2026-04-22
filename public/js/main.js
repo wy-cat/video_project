@@ -728,6 +728,45 @@ async function loadTasksList() {
             const createdDate = new Date(task.createdAt).toLocaleString('zh-CN');
             const updatedDate = new Date(task.updatedAt).toLocaleString('zh-CN');
             
+            // 检查是否是需要确认的任务
+            const isPending = window.pendingConfirmation && 
+                             window.pendingConfirmation.taskId === task.taskId;
+            
+            // 根据是否需要确认来设置不同的样式和文本
+            let buttonStyle, buttonText, buttonOnClick;
+            
+            if (isPending) {
+                // 需要确认：紫色渐变背景 + 闪烁动画
+                buttonStyle = `
+                    padding: 10px 20px; 
+                    font-size: 14px; 
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    color: white; 
+                    border: none; 
+                    border-radius: 5px; 
+                    cursor: pointer; 
+                    font-weight: 600;
+                    animation: pulse 2s infinite;
+                    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+                `;
+                buttonText = `⏸️ 核对完成，继续下一步(${window.pendingConfirmation.nextStep})`;
+                buttonOnClick = `handleContinueWithConfirmation('${task.taskId}', ${window.pendingConfirmation.currentStep}, ${window.pendingConfirmation.nextStep})`;
+            } else {
+                // 普通继续：绿色背景
+                buttonStyle = `
+                    padding: 8px 16px; 
+                    font-size: 13px; 
+                    background: #28a745; 
+                    color: white; 
+                    border: none; 
+                    border-radius: 5px; 
+                    cursor: pointer; 
+                    font-weight: 500;
+                `;
+                buttonText = `▶️ 继续下一步(${maxStep + 1})`;
+                buttonOnClick = `continueFromStep('${task.taskId}', ${maxStep + 1})`;
+            }
+            
             html += `
                 <div style="border: 1px solid #ddd; padding: 12px; border-radius: 5px; background: #f9f9f9;">
                     <div style="margin-bottom: 8px;">
@@ -739,11 +778,14 @@ async function loadTasksList() {
                     <div style="margin-bottom: 10px; font-size: 12px; color: #999;">
                         创建: ${createdDate} | 更新: ${updatedDate}
                     </div>
+                    ${isPending ? `<div style="margin-bottom: 10px; padding: 8px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px; font-size: 13px; color: #856404;">
+                        ⚠️ 步骤 ${window.pendingConfirmation.currentStep} (${STEP_LABELS[window.pendingConfirmation.currentStep]}) 已完成，请核对内容后继续
+                    </div>` : ''}
                     <!-- 操作按钮 -->
                     <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                        <button onclick="continueFromStep('${task.taskId}', ${maxStep + 1})" 
-                                style="padding: 8px 16px; font-size: 13px; background: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: 500;">
-                            ▶️ 继续下一步(${maxStep + 1})
+                        <button onclick="${buttonOnClick}" 
+                                style="${buttonStyle}">
+                            ${buttonText}
                         </button>
                         <button onclick="deleteTask('${task.taskId}')" 
                                 style="padding: 8px 16px; font-size: 13px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer;">
@@ -756,8 +798,60 @@ async function loadTasksList() {
         
         html += '</div>';
         tasksList.innerHTML = html;
+        
+        // 添加CSS动画（如果还没有）
+        if (!document.getElementById('pulseAnimation')) {
+            const style = document.createElement('style');
+            style.id = 'pulseAnimation';
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.05); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
     } catch (error) {
         console.error('加载任务列表失败:', error);
+    }
+}
+
+// ==============================
+// 处理带确认的继续（合并了确认和继续逻辑）
+// ==============================
+async function handleContinueWithConfirmation(taskId, currentStep, nextStep) {
+    try {
+        console.log(`用户确认步骤${currentStep}，准备继续步骤${nextStep}`);
+        
+        // 发送确认请求到后端
+        const response = await fetch('http://localhost:3001/api/video/confirm-step', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                taskId: taskId,
+                step: currentStep
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) {
+            throw new Error(result.error || '确认失败');
+        }
+        
+        console.log(`✅ 步骤${currentStep}已确认，后端将自动继续执行步骤${nextStep}`);
+        
+        // 清除待确认状态
+        window.pendingConfirmation = null;
+        
+        // 刷新任务列表，移除高亮
+        loadTasksList();
+        
+    } catch (error) {
+        console.error('确认步骤失败:', error);
+        alert('确认失败: ' + error.message);
     }
 }
 
@@ -1255,99 +1349,20 @@ async function loadLatestTaskCache() {
 }
 
 // ==============================
-// 显示"继续下一步"按钮（在任务列表底部）
+// 显示"继续下一步"提示（高亮任务列表中的按钮）
 // ==============================
 function showContinueButton(taskId, currentStep, nextStep) {
-    // 移除已存在的继续按钮
-    const existingBtn = document.getElementById('continueStepBtn');
-    if (existingBtn) {
-        existingBtn.remove();
-    }
+    console.log(`步骤${currentStep}完成，等待用户确认后继续步骤${nextStep}`);
     
-    // 在任务列表底部创建继续按钮
-    const tasksList = document.getElementById('tasksList');
-    const btnContainer = document.createElement('div');
-    btnContainer.id = 'continueStepBtn';
-    btnContainer.style.cssText = `
-        margin-top: 20px;
-        padding: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
-        text-align: center;
-        color: white;
-    `;
+    // 标记该任务需要确认
+    window.pendingConfirmation = {
+        taskId: taskId,
+        currentStep: currentStep,
+        nextStep: nextStep
+    };
     
-    btnContainer.innerHTML = `
-        <div style="margin-bottom: 15px;">
-            <h3 style="margin: 0 0 10px 0;">⏸️ 步骤 ${currentStep} 已完成</h3>
-            <p style="margin: 0; font-size: 14px; opacity: 0.9;">
-                ${STEP_LABELS[currentStep]} 已生成完成，请核对内容后继续
-            </p>
-        </div>
-        <button id="confirmContinueBtn" style="
-            padding: 12px 40px;
-            font-size: 16px;
-            background: white;
-            color: #667eea;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-        " onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">
-            ▶️ 继续下一步(${nextStep})
-        </button>
-    `;
-    
-    tasksList.appendChild(btnContainer);
-    
-    // 绑定点击事件
-    document.getElementById('confirmContinueBtn').addEventListener('click', async () => {
-        try {
-            // 禁用按钮，显示加载状态
-            const btn = document.getElementById('confirmContinueBtn');
-            btn.disabled = true;
-            btn.innerHTML = '⏳ 正在继续...';
-            btn.style.background = '#ccc';
-            btn.style.cursor = 'not-allowed';
-            
-            // 发送确认请求到后端
-            const response = await fetch('http://localhost:3001/api/video/confirm-step', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    taskId: taskId,
-                    step: currentStep
-                })
-            });
-            
-            const result = await response.json();
-            
-            if (!result.success) {
-                throw new Error(result.error || '确认失败');
-            }
-            
-            console.log(`✅ 步骤${currentStep}已确认，继续执行步骤${nextStep}`);
-            
-            // 移除按钮
-            btnContainer.remove();
-            
-        } catch (error) {
-            console.error('确认步骤失败:', error);
-            alert('确认失败: ' + error.message);
-            
-            // 恢复按钮状态
-            const btn = document.getElementById('confirmContinueBtn');
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = `▶️ 继续下一步(${nextStep})`;
-                btn.style.background = 'white';
-                btn.style.cursor = 'pointer';
-            }
-        }
-    });
+    // 刷新任务列表，高亮显示需要确认的按钮
+    loadTasksList();
 }
 
 // ==============================

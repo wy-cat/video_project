@@ -16,22 +16,116 @@ const STEP_LABELS = {
     7: '拼接视频',
     8: '添加BGM'
 };
+// 更新步骤卡片显示（根据stepOutputs数据动态生成卡片）
+function updateStepCards() {
+    const cardsContainer = document.getElementById('stepOutputCards');
+    cardsContainer.innerHTML = '';
+    
+    Object.keys(stepOutputs).sort((a, b) => a - b).forEach(step => {
+        const card = document.createElement('div');
+        card.className = 'step-card';
+        card.dataset.step = step;
+        
+        if (step == currentSelectedStep) {
+            card.classList.add('active');
+        }
+        
+        card.innerHTML = `
+            <div class="step-card-number">步骤 ${step}</div>
+            <div class="step-card-label">${STEP_LABELS[step] || '处理中'}</div>
+        `;
+        
+        card.addEventListener('click', () => selectStepCard(step));
+        cardsContainer.appendChild(card);
+    });
+}
+
+// 选择步骤卡片并显示对应内容
+function selectStepCard(step) {
+    currentSelectedStep = step;
+    isEditing = false; // 切换步骤时退出编辑状态
+    
+    // 更新卡片高亮
+    document.querySelectorAll('.step-card').forEach(card => {
+        card.classList.remove('active');
+        if (card.dataset.step == step) {
+            card.classList.add('active');
+        }
+    });
+    
+    // 显示对应内容
+    renderStepContent(step);
+}
+
+// 渲染步骤内容（包含编辑按钮）
+function renderStepContent(step) {
+    const contentContainer = document.getElementById('stepOutputContent');
+    const content = stepOutputs[step];
+    const rawData = stepRawData[step];
+    
+    if (!content) {
+        contentContainer.innerHTML = '<p style="color: #999; text-align: center;">暂无输出内容</p>';
+        return;
+    }
+    
+    // 判断该步骤是否支持编辑（步骤1、2、3、5支持编辑文本内容）
+    const isEditable = [1, 2, 3, 5].includes(Number(step));
+    // 判断该步骤是否支持重新生成
+    const isRegeneratable = [1, 2, 3, 5].includes(Number(step));
+    
+    let html = '';
+    
+    // 添加头部（标题和操作按钮）
+    html += '<div class="step-output-header">';
+    html += `<div class="step-output-title">${STEP_LABELS[step]}</div>`;
+    
+    if ((isEditable || isRegeneratable) && rawData) {
+        html += '<div class="step-output-actions">';
+        if (!isEditing) {
+            if (isRegeneratable) {
+                html += `<button class="regenerate-btn" onclick="regenerateStep(${step})">🔄 重新生成</button>`;
+            }
+            if (isEditable) {
+                html += `<button class="edit-btn" onclick="enterEditMode(${step})">✏️ 编辑</button>`;
+            }
+        } else {
+            html += `<button class="save-btn" onclick="saveEdit(${step})">💾 保存</button>`;
+            html += `<button class="cancel-btn" onclick="cancelEdit(${step})">❌ 取消</button>`;
+        }
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    
+    // 添加内容区域
+    html += '<div class="step-output-body">';
+    if (isEditing) {
+        // 编辑模式：显示文本框
+        const editableText = getEditableText(step, rawData);
+        html += `<textarea id="editTextarea" style="width: 100%; height: 100%;">${escapeHtmlForTextarea(editableText)}</textarea>`;
+    } else {
+        // 查看模式：显示格式化内容
+        html += `<div>${content}</div>`;
+    }
+    html += '</div>';
+    
+    contentContainer.innerHTML = html;
+}
 
 // 添加步骤输出并更新显示
-function addStepOutput(step, content, result = null, autoSelect = true) {
-    // 如果有result数据，格式化显示
-    let displayContent = content;
+function addStepOutput(step, content, result, autoSelect) {
+
     if (result) {
-        displayContent = formatStepResult(step, result);
+        // 根据步骤和结果数据格式化显示内容
+        stepOutputs[step] = formatStepResult(step, result);
         // 保存原始数据用于编辑
         stepRawData[step] = result;
     }
-    
-    stepOutputs[step] = displayContent;
+    // 新增步骤卡片
     updateStepCards();
     
-    // 自动选中最新步骤（可选）
-    if (autoSelect) {
+    // 自动选中最新步骤（可选），或者当前没有选中任何步骤时也要选中
+    if (autoSelect || currentSelectedStep === null) {
         selectStepCard(step);
     }
 }
@@ -162,7 +256,7 @@ function formatImagesResult(result) {
     return html;
 }
 
-// 步骤6：视频提示词展示（每个一个框）
+// 步骤5：视频提示词展示（每个一个框）
 function formatVideoPromptsResult(result) {
     if (!result.videoPromptList || !Array.isArray(result.videoPromptList)) {
         return '无视频提示词数据';
@@ -179,7 +273,7 @@ function formatVideoPromptsResult(result) {
     return html;
 }
 
-// 步骤7：视频展示（每行两个，可点击查看提示词和参考图）
+// 步骤6：视频展示（每行两个，可点击查看提示词和参考图）
 function formatVideosResult(result) {
     if (!result.videoUrls || !Array.isArray(result.videoUrls)) {
         return '无视频数据';
@@ -428,101 +522,7 @@ async function regenerateSingleVideo(index) {
     alert('单个视频重新生成功能开发中，当前请使用步骤级别的重新生成');
 }
 
-// 更新步骤卡片显示（根据stepOutputs数据动态生成卡片）
-function updateStepCards() {
-    const cardsContainer = document.getElementById('stepOutputCards');
-    cardsContainer.innerHTML = '';
-    
-    Object.keys(stepOutputs).sort((a, b) => a - b).forEach(step => {
-        const card = document.createElement('div');
-        card.className = 'step-card';
-        card.dataset.step = step;
-        
-        if (step == currentSelectedStep) {
-            card.classList.add('active');
-        }
-        
-        card.innerHTML = `
-            <div class="step-card-number">步骤 ${step}</div>
-            <div class="step-card-label">${STEP_LABELS[step] || '处理中'}</div>
-        `;
-        
-        card.addEventListener('click', () => selectStepCard(step));
-        cardsContainer.appendChild(card);
-    });
-}
 
-// 选择步骤卡片并显示对应内容
-function selectStepCard(step) {
-    currentSelectedStep = step;
-    isEditing = false; // 切换步骤时退出编辑状态
-    
-    // 更新卡片高亮
-    document.querySelectorAll('.step-card').forEach(card => {
-        card.classList.remove('active');
-        if (card.dataset.step == step) {
-            card.classList.add('active');
-        }
-    });
-    
-    // 显示对应内容
-    renderStepContent(step);
-}
-
-// 渲染步骤内容（包含编辑按钮）
-function renderStepContent(step) {
-    const contentContainer = document.getElementById('stepOutputContent');
-    const content = stepOutputs[step];
-    const rawData = stepRawData[step];
-    
-    if (!content) {
-        contentContainer.innerHTML = '<p style="color: #999; text-align: center;">暂无输出内容</p>';
-        return;
-    }
-    
-    // 判断该步骤是否支持编辑（步骤1、2、3、5支持编辑文本内容）
-    const isEditable = [1, 2, 3, 5].includes(Number(step));
-    // 判断该步骤是否支持重新生成
-    const isRegeneratable = [1, 2, 3, 5].includes(Number(step));
-    
-    let html = '';
-    
-    // 添加头部（标题和操作按钮）
-    html += '<div class="step-output-header">';
-    html += `<div class="step-output-title">${STEP_LABELS[step]}</div>`;
-    
-    if ((isEditable || isRegeneratable) && rawData) {
-        html += '<div class="step-output-actions">';
-        if (!isEditing) {
-            if (isRegeneratable) {
-                html += `<button class="regenerate-btn" onclick="regenerateStep(${step})">🔄 重新生成</button>`;
-            }
-            if (isEditable) {
-                html += `<button class="edit-btn" onclick="enterEditMode(${step})">✏️ 编辑</button>`;
-            }
-        } else {
-            html += `<button class="save-btn" onclick="saveEdit(${step})">💾 保存</button>`;
-            html += `<button class="cancel-btn" onclick="cancelEdit(${step})">❌ 取消</button>`;
-        }
-        html += '</div>';
-    }
-    
-    html += '</div>';
-    
-    // 添加内容区域
-    html += '<div class="step-output-body">';
-    if (isEditing) {
-        // 编辑模式：显示文本框
-        const editableText = getEditableText(step, rawData);
-        html += `<textarea id="editTextarea" rows="15">${escapeHtmlForTextarea(editableText)}</textarea>`;
-    } else {
-        // 查看模式：显示格式化内容
-        html += `<pre>${content}</pre>`;
-    }
-    html += '</div>';
-    
-    contentContainer.innerHTML = html;
-}
 
 // 获取可编辑的文本内容
 function getEditableText(step, rawData) {
@@ -880,15 +880,15 @@ async function continueFromStep(taskId, startStep) {
     progressLog.innerHTML = '';
 
     // 重置所有节点状态
-    const resetProgressNodes = () => {
-        document.querySelectorAll('.progress-node').forEach(node => {
-            node.classList.remove('completed', 'active');
-        });
-    };
-
+    // const resetProgressNodes = () => {
+    //     document.querySelectorAll('.progress-node').forEach(node => {
+    //         node.classList.remove('completed', 'active');
+    //     });
+    // };
+    console.log("startStep", startStep);
     // 更新进度节点状态
-    const updateProgressNode = (step) => {
-        if (step === null || step === undefined) {
+    const updateProgressNode = (startStep) => {
+        if (startStep === null || startStep === undefined) {
             return;
         }
 
@@ -896,12 +896,12 @@ async function continueFromStep(taskId, startStep) {
             node.classList.remove('active');
         });
 
-        const currentNode = document.querySelector(`.progress-node[data-step="${step}"]`);
+        const currentNode = document.querySelector(`.progress-node[data-step="${startStep}"]`);
         if (currentNode) {
             currentNode.classList.add('active');
         }
 
-        for (let i = 1; i < step; i++) {
+        for (let i = 1; i < startStep; i++) {
             const node = document.querySelector(`.progress-node[data-step="${i}"]`);
             if (node) {
                 node.classList.remove('active');
@@ -930,13 +930,20 @@ async function continueFromStep(taskId, startStep) {
             progressBar = document.createElement('div');
             progressBar.id = 'progressBar';
             progressBar.style.cssText = 'width: 0%; height: 4px; background: #007bff; transition: width 0.3s; margin-bottom: 10px;';
-            progressSection.insertBefore(progressBar, progressLog);
+            progressSection.insertBefore(progressBar, progressSection.firstChild);
         }
         progressBar.style.width = percentage + '%';
     };
 
     try {
-        resetProgressNodes();
+        // 只清除 active 状态，保留已完成的 completed 状态
+        const resetProgressNodesPartial = () => {
+            document.querySelectorAll('.progress-node.active').forEach(node => {
+                node.classList.remove('active');
+            });
+        };
+        resetProgressNodesPartial();
+        
         // 不清空步骤输出，保留已有的缓存数据
         // resetStepOutputs();
         log(`从步骤${startStep}继续生成视频...`);
@@ -957,20 +964,33 @@ async function continueFromStep(taskId, startStep) {
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
-            updateProgressBar(data.percentage);
-            
+            console.log("llllllllll" ,data)
+
+            if (typeof data.percentage === 'number') {
+                updateProgressBar(data.percentage);
+            }
+
             if (data.step && data.step !== 'complete' && data.step !== 'error') {
                 updateProgressNode(data.step);
-                
-                // 当步骤完成时（显示✅），添加到步骤输出
-                if (data.message.includes('✅') && !data.message.includes('等待')) {
-                    addStepOutput(data.step, data.message, data.result);
+
+                const isWaitingForConfirmation = data.result && data.result.waitingForConfirmation;
+
+                // 只要后端已经返回了完整结果，就立即刷新卡片和详情，不再依赖消息文案里的✅
+                if (data.result && !isWaitingForConfirmation) {
+                    addStepOutput(
+                        data.step,
+                        `✅ ${STEP_LABELS[data.step] || `步骤${data.step}`}已完成`,
+                        data.result,
+                        true
+                    );
+                    // 强制选中并渲染新步骤内容
+                    selectStepCard(data.step);
                 }
-                
+
                 // 检测到等待确认状态
-                if (data.result && data.result.waitingForConfirmation) {
+                if (isWaitingForConfirmation) {
                     showContinueButton(data.result.taskId, data.step, data.result.nextStep);
+                    log(data.message);
                     return;
                 }
             }
@@ -1209,7 +1229,7 @@ async function loadTaskToStepOutput(taskId) {
 }
 
 // ==============================
-// 加载最新任务的缓存数据到步骤输出
+// 初始化加载最新任务的缓存数据到步骤输出
 // ==============================
 async function loadLatestTaskCache() {
     try {
@@ -1415,28 +1435,13 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
         });
     };
 
-    // 更新进度节点状态
-    const updateProgressNode = (step) => {
-        // 移除所有 active 状态
-        document.querySelectorAll('.progress-node.active').forEach(node => {
-            node.classList.remove('active');
-        });
+    const startStep = 1; // 从步骤1开始生成
 
-        // 标记当前步骤为 active（蓝色）
-        const currentNode = document.querySelector(`.progress-node[data-step="${step}"]`);
-        if (currentNode) {
-            currentNode.classList.add('active');
-        }
-
-        // 标记之前的步骤为 completed（绿色）
-        for (let i = 1; i < step; i++) {
-            const node = document.querySelector(`.progress-node[data-step="${i}"]`);
-            if (node) {
-                node.classList.remove('active');
-                node.classList.add('completed');
-            }
-        }
-    };
+    // 标记当前步骤为正在生成动态效果 active（蓝色）
+    const currentNode = document.querySelector(`.progress-node[data-step="${startStep}"]`);
+    if (currentNode) {
+        currentNode.classList.add('active');
+    }
 
     // 日志输出（支持多行消息）
     const log = (msg) => {
@@ -1468,7 +1473,7 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
         resetProgressNodes();
         // 不清空步骤输出，保留已有的缓存数据
         // resetStepOutputs();
-        log("开始生成视频...");
+        log("任务开始生成中...");
 
         // 构建查询参数
         const params = new URLSearchParams({
@@ -1484,24 +1489,28 @@ document.getElementById('generateBtn').addEventListener('click', async () => {
 
         eventSource.onmessage = (event) => {
             const data = JSON.parse(event.data);
-            
+
+            console.log("SSE消息:", data);
+
             // 更新进度条
             updateProgressBar(data.percentage);
             
             // 更新进度节点和步骤输出
-            if (data.step && data.step !== 'complete' && data.step !== 'error') {
+            if (data.result && data.step) {
                 updateProgressNode(data.step);
                 
                 // 当步骤完成时（显示✅），添加到步骤输出
                 if (data.message.includes('✅')) {
-                    addStepOutput(data.step, data.message, data.result);
+                    addStepOutput(data.step, data.message, data.result, true);
+                    // 强制选中并渲染新步骤内容
+                    selectStepCard(data.step);
                 }
             }
             
             // 输出日志
             log(data.message);
 
-            // 如果完成或出错，关��连接
+            // 如果完成或出错，关  连接
             if (data.step === 'complete') {
                 eventSource.close();
                 

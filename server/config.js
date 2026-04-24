@@ -14,7 +14,7 @@ module.exports = {
     VIDEO_API: {
         KEY: process.env.VIDEO_API_KEY,
         BASE_URL: `${process.env.LLM_BASE_URL}/videos`,
-        MODEL: "doubao-seedance-1-5-pro-251215"  // ✅ 你指定
+        MODEL: "grok-imagine-video"  // ✅ 你指定
     },
     PORT: process.env.PORT || 3001
 };

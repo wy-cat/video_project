@@ -2,104 +2,164 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>视频生成工具</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI视频生成系统</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>AI视频生成系统</h1>
-        
-        <div class="form-section">
-            <div class="input-group">
-                <label>角色1 (role1):</label>
-                <input type="text" id="role1" value="白衣佩剑女侠" placeholder="输入角色1">
-            </div>
-            <div class="input-group">
-                <label>角色2 (role2):</label>
-                <input type="text" id="role2" value="黑衣刺刀蒙面男" placeholder="输入角色2">
-            </div>
-            <div class="input-group">
-                <label>场景 (scene):</label>
-                <input type="text" id="scene" value="比武擂台" placeholder="输入场景">
-            </div>
-            <div class="input-group">
-                <label>风格 (style):</label>
-                <input type="text" id="style" value="国漫风" placeholder="输入风格">
-            </div>
-            <div class="input-group">
-                <label>BGM关键词:</label>
-                <input type="text" id="bgm" value="热血" placeholder="输入BGM关键词">
-            </div>
-            <button id="generateBtn">开始生成</button>
-        </div>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <section class="card brand-card">
+                <div class="brand-mark">
+                    <div class="brand-logo">AI</div>
+                    <div class="brand-copy">
+                        <h1>AI视频生成系统</h1>
+                        <p>让创意故事生动呈现</p>
+                    </div>
+                </div>
+            </section>
 
-        <div class="progress-section" id="progressSection" style="display: none;">
-            <h3>生成进度</h3>
-            
-            <!-- 进度条节点 -->
-            <div class="progress-nodes">
-                <div class="progress-node" data-step="1">
-                    <div class="node-circle">1</div>
-                    <div class="node-label">生成故事</div>
+            <section class="card form-section" id="configPanel">
+                <div class="section-header">
+                    <div>
+                        <h3>项目配置</h3>
+                        <p class="section-desc">填写角色、场景与风格，一键启动完整视频生成流程</p>
+                    </div>
                 </div>
-                <div class="progress-node" data-step="2">
-                    <div class="node-circle">2</div>
-                    <div class="node-label">分镜脚本</div>
-                </div>
-                <div class="progress-node" data-step="3">
-                    <div class="node-circle">3</div>
-                    <div class="node-label">图片提示词</div>
-                </div>
-                <div class="progress-node" data-step="4">
-                    <div class="node-circle">4</div>
-                    <div class="node-label">生成图片</div>
-                </div>
-                <div class="progress-node" data-step="5">
-                    <div class="node-circle">5</div>
-                    <div class="node-label">视频提示词</div>
-                </div>
-                <div class="progress-node" data-step="6">
-                    <div class="node-circle">6</div>
-                    <div class="node-label">生成视频</div>
-                </div>
-                <div class="progress-node" data-step="7">
-                    <div class="node-circle">7</div>
-                    <div class="node-label">拼接视频</div>
-                </div>
-                <div class="progress-node" data-step="8">
-                    <div class="node-circle">8</div>
-                    <div class="node-label">添加BGM</div>
-                </div>
-            </div>
 
-            <!-- 步骤输出区域 -->
-            <div id="stepOutputSection" class="step-output-section">
-                <h4>步骤输出</h4>
-                <div id="stepOutputCards" class="step-output-cards"></div>
-                <div id="stepOutputContent" class="step-output-content">
-                    <p style="color: #999; text-align: center;">等待步骤完成...</p>
+                <div class="input-group">
+                    <label for="role1">角色1 <span>(role1)</span></label>
+                    <input type="text" id="role1" value="四岁女孩，来自大唐，叫兕子" placeholder="输入角色1">
                 </div>
-            </div>
+                <div class="input-group">
+                    <label for="role2">角色2 <span>(role2)</span></label>
+                    <input type="text" id="role2" value="现代网文写手，20岁青年" placeholder="输入角色2">
+                </div>
+                <div class="input-group">
+                    <label for="scene">场景 <span>(scene)</span></label>
+                    <input type="text" id="scene" value="大唐兕子通过玉佩穿越到现代青年家里" placeholder="输入场景">
+                </div>
+                <div class="input-group">
+                    <label for="style">风格 <span>(style)</span></label>
+                    <input type="text" id="style" value="漫剧风" placeholder="输入风格">
+                </div>
+                <div class="input-group">
+                    <label for="bgm">BGM关键词</label>
+                    <input type="text" id="bgm" value="无" placeholder="输入BGM关键词">
+                </div>
 
-        </div>
+                <button id="generateBtn" class="primary-cta">开始生成</button>
+            </section>
 
-        <div class="result-section" id="resultSection" style="display: none;">
-            <h3>生成结果</h3>
-            <video id="finalVideo" controls style="width: 100%; max-width: 800px;"></video>
-            <a id="downloadLink" href="" download>下载视频</a>
-        </div>
+            <section class="card tip-card">
+                <div class="section-header compact">
+                    <h3>创作小贴士</h3>
+                </div>
+                <ul class="tip-list">
+                    <li>角色描述尽量包含外观、身份和情绪，生成结果会更稳定。</li>
+                    <li>场景建议明确时间、地点与氛围，例如“古城夜战”。</li>
+                    <li>风格与BGM关键词可以偏“情绪化”，更容易形成统一视觉节奏。</li>
+                </ul>
+            </section>
+        </aside>
 
-        <div class="task-history-section" id="taskHistorySection">
-            <h3>任务历史</h3>
-            <button id="refreshTasksBtn">刷新任务列表</button>
-            <button id="clearCacheBtn" style="background-color: #dc3545;">清空所有缓存</button>
-            <div id="tasksList" style="margin-top: 15px;"></div>
-        </div>
+        <main class="main-content">
+            <section class="card progress-section" id="progressSection" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h3>生成进度</h3>
+                        <p class="section-desc">8 步完整工作流，实时查看当前执行状态</p>
+                    </div>
+                </div>
 
-        <div class="log-section">
-            <h3>输出日志</h3>
-            <div id="progressLog"></div>
-        </div>
+                <div class="progress-nodes">
+                    <div class="progress-node" data-step="1">
+                        <div class="node-circle">1</div>
+                        <div class="node-label">生成故事</div>
+                    </div>
+                    <div class="progress-node" data-step="2">
+                        <div class="node-circle">2</div>
+                        <div class="node-label">分镜脚本</div>
+                    </div>
+                    <div class="progress-node" data-step="3">
+                        <div class="node-circle">3</div>
+                        <div class="node-label">图片提示词</div>
+                    </div>
+                    <div class="progress-node" data-step="4">
+                        <div class="node-circle">4</div>
+                        <div class="node-label">生成图片</div>
+                    </div>
+                    <div class="progress-node" data-step="5">
+                        <div class="node-circle">5</div>
+                        <div class="node-label">视频提示词</div>
+                    </div>
+                    <div class="progress-node" data-step="6">
+                        <div class="node-circle">6</div>
+                        <div class="node-label">生成视频</div>
+                    </div>
+                    <div class="progress-node" data-step="7">
+                        <div class="node-circle">7</div>
+                        <div class="node-label">拼接视频</div>
+                    </div>
+                    <div class="progress-node" data-step="8">
+                        <div class="node-circle">8</div>
+                        <div class="node-label">添加 BGM</div>
+                    </div>
+                </div>
+
+                <div id="stepOutputSection" class="step-output-section">
+                    <div class="section-header compact">
+                        <div>
+                            <h4>当前步骤</h4>
+                            <p class="section-desc">点击步骤卡片查看输出内容，支持重新生成与编辑</p>
+                        </div>
+                    </div>
+                    <div id="stepOutputCards" class="step-output-cards"></div>
+                    <div id="stepOutputContent" class="step-output-content">
+                        <p class="empty-state">等待步骤完成...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card result-section" id="resultSection" style="display: none;">
+                <div class="section-header">
+                    <div>
+                        <h3>生成结果</h3>
+                        <p class="section-desc">可直接预览最终视频并下载到本地</p>
+                    </div>
+                </div>
+                <div class="result-media">
+                    <video id="finalVideo" controls></video>
+                </div>
+                <a id="downloadLink" href="" download class="download-link">下载视频</a>
+            </section>
+
+            <section class="bottom-grid">
+                <section class="card task-history-section" id="taskHistorySection">
+                    <div class="section-header task-header">
+                        <div>
+                            <h3>任务历史</h3>
+                            <p class="section-desc">查看、继续或清理已有任务缓存</p>
+                        </div>
+                        <div class="section-actions">
+                            <button id="refreshTasksBtn" class="secondary-btn">刷新任务列表</button>
+                            <button id="clearCacheBtn" class="danger-btn">清空所有缓存</button>
+                        </div>
+                    </div>
+                    <div id="tasksList" class="tasks-list"></div>
+                </section>
+
+                <section class="card log-section">
+                    <div class="section-header">
+                        <div>
+                            <h3>输出日志</h3>
+                            <p class="section-desc">实时查看任务执行与接口返回信息</p>
+                        </div>
+                    </div>
+                    <div id="progressLog" class="terminal-log"></div>
+                </section>
+            </section>
+        </main>
     </div>
 
     <script src="js/main.js"></script>

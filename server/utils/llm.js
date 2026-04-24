@@ -171,7 +171,7 @@ exports.generateVideoPrompts = async (imagePromptList) => {
         // 只读取一次模板，避免重复IO
         let template = await loadPrompt("video.md");
 
-        // ���建并发任务数组
+        // 建并发任务数组
         const tasks = [];
         for (let i = 0; i < imagePromptList.length - 1; i++) {
             const task = (async (index) => {
@@ -179,12 +179,13 @@ exports.generateVideoPrompts = async (imagePromptList) => {
                     console.log(`\n  [视频提示词 ${index + 1}/${imagePromptList.length - 1}] 生成中...`);
                     
                     // 当前循环的两个相邻提示词
-                    const currentPrompt = imagePromptList[index];
-                    const nextPrompt = imagePromptList[index + 1];
+                    const image_prompt_start = imagePromptList[index];
+                    const image_prompt_end = imagePromptList[index + 1];
 
                     // 把两个提示词拼接成一段文本，替换模板中的{{image_prompt}}变量
-                    const combinedPrompt = `第一个描述词：${currentPrompt}\n第二个描述词：${nextPrompt}`;
-                    const finalTemplate = template.replaceAll("{{image_prompt}}", combinedPrompt);
+                    const finalTemplate = template.replaceAll("{{image_prompt_start}}", image_prompt_start)
+                        .replaceAll("{{image_prompt_end}}", image_prompt_end);
+
 
                     // 调用模型生成当前成对的视频提示词
                     const res = await llm.invoke(finalTemplate);

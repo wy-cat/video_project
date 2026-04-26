@@ -291,7 +291,7 @@ router.get('/generate-full-video-stream', async (req, res) => {
         }
 
         // ==============================
-        // 步骤4: 文生图并提取首尾帧（支持断点续传）
+        // 步骤4: 文生图（支持断点续传）
         // ==============================
         if (startStepNum <= 4) {
             sendProgress(res, 4, '正在生成图片...', 40);
@@ -389,7 +389,7 @@ router.get('/generate-full-video-stream', async (req, res) => {
         }
 
         // ==============================
-        // 步骤6: 批量生成视频（支持断点续传）
+        // 步骤6: 提取首尾帧并批量生成视频（支持断点续传）
         // ==============================
         if (startStepNum <= 6) {
             sendProgress(res, 6, '正在生成视频...', 65);

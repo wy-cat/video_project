@@ -53,7 +53,8 @@ exports.createVideoTask = async (vprompt, shouZhen, weiZhen) => {
         console.log('');
 
         const res = await axiosInstance.post(VIDEO_API.BASE_URL, {
-            model: "doubao-seedance-1-5-pro-251215",
+            model: VIDEO_API.MODEL,
+            seconds:"10",
             prompt: fullPrompt,
             input_reference: inputReference
         }, {
@@ -142,7 +143,7 @@ exports.pollVideoAndGetUrl = async (taskId) => {
         
         const maxWait = 480000; // 8分钟超时（毫秒）
         let waited = 0;
-        const delay = 5000; // 5秒轮询一次（毫秒）
+        const delay = 10000; // 10秒轮询一次（毫秒）
         let pollCount = 0;
 
         while (waited < maxWait) {
@@ -405,282 +406,283 @@ async function downloadVideo(url, tempDir, index) {
     });
 }
 
-// ==============================
-// 6. 获取视频时长
-// 功能：使用FFprobe获取视频的时长
-// 输入：videoPath（视频路径）
-// 输出：duration（时长，单位秒）
-// ==============================
-async function getVideoDuration(videoPath) {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(videoPath, (err, metadata) => {
-            if (err) {
-                console.error('❌ 获取视频时长失败:', err.message);
-                reject(err);
-            } else {
-                const duration = metadata.format.duration;
-                console.log(`⏱️ 视频时长: ${duration.toFixed(2)}秒`);
-                resolve(duration);
-            }
-        });
-    });
-}
 
-// ==============================
-// 7. 获取音频时长
-// 功能：使用FFprobe获取音频的时长
-// 输入：audioPath（音频路径）
-// 输出：duration（时长，单位秒）
-// ==============================
-async function getAudioDuration(audioPath) {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(audioPath, (err, metadata) => {
-            if (err) {
-                console.error('❌ 获取音频时长失败:', err.message);
-                reject(err);
-            } else {
-                const duration = metadata.format.duration;
-                console.log(`⏱️ 音频时长: ${duration.toFixed(2)}秒`);
-                resolve(duration);
-            }
-        });
-    });
-}
+// // ==============================
+// // 6. 获取视频时长
+// // 功能：使用FFprobe获取视频的时长
+// // 输入：videoPath（视频路径）
+// // 输出：duration（时长，单位秒）
+// // ==============================
+// async function getVideoDuration(videoPath) {
+//     return new Promise((resolve, reject) => {
+//         ffmpeg.ffprobe(videoPath, (err, metadata) => {
+//             if (err) {
+//                 console.error('❌ 获取视频时长失败:', err.message);
+//                 reject(err);
+//             } else {
+//                 const duration = metadata.format.duration;
+//                 console.log(`⏱️ 视频时长: ${duration.toFixed(2)}秒`);
+//                 resolve(duration);
+//             }
+//         });
+//     });
+// }
 
-// ==============================
-// 8. 搜索BGM（网易云API）
-// 功能：根据关键词从网易云搜索BGM
-// 输入：keyword（搜索关键词）
-// 输出：bgmList（BGM列表）
-// ==============================
-async function searchBgmFromNetease(keyword) {
-    try {
-        console.log(`🔍 正在搜索BGM: "${keyword}"`);
-        
-        // 使用网易云API搜索
-        const response = await axios.get('https://music.163.com/api/search/get', {
-            params: {
-                s: keyword,
-                type: 1,  // 1=单曲
-                limit: 10,
-                offset: 0
-            },
-            timeout: 10000
-        });
-        
-        if (!response.data || !response.data.result || !response.data.result.songs) {
-            console.warn('⚠️ 网易云API返回为空，使用默认BGM');
-            return [];
-        }
-        
-        const songs = response.data.result.songs.slice(0, 5);
-        console.log(`✅ 找到 ${songs.length} 首BGM`);
-        
-        return songs.map(song => ({
-            id: song.id,
-            name: song.name,
-            artist: song.artists?.[0]?.name || '未知',
-            duration: song.duration / 1000,  // 转换为秒
-            url: `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`
-        }));
-    } catch (error) {
-        console.warn('⚠️ 网易云API搜索失败:', error.message);
-        return [];
-    }
-}
+// // ==============================
+// // 7. 获取音频时长
+// // 功能：使用FFprobe获取音频的时长
+// // 输入：audioPath（音频路径）
+// // 输出：duration（时长，单位秒）
+// // ==============================
+// async function getAudioDuration(audioPath) {
+//     return new Promise((resolve, reject) => {
+//         ffmpeg.ffprobe(audioPath, (err, metadata) => {
+//             if (err) {
+//                 console.error('❌ 获取音频时长失败:', err.message);
+//                 reject(err);
+//             } else {
+//                 const duration = metadata.format.duration;
+//                 console.log(`⏱️ 音频时长: ${duration.toFixed(2)}秒`);
+//                 resolve(duration);
+//             }
+//         });
+//     });
+// }
 
-// ==============================
-// 9. 选择最合适的BGM
-// 功能：根据视频时长选择最接近的BGM
-// 输入：bgmList（BGM列表）, videoDuration（视频时长）
-// 输出：selectedBgm（选中的BGM）
-// ==============================
-function selectBestBgm(bgmList, videoDuration) {
-    if (!bgmList || bgmList.length === 0) {
-        console.warn('⚠️ BGM列表为空，将使用循环播放模式');
-        return null;
-    }
-    
-    // 找出时长最接近视频的BGM
-    let bestBgm = bgmList[0];
-    let minDiff = Math.abs(bgmList[0].duration - videoDuration);
-    
-    for (let i = 1; i < bgmList.length; i++) {
-        const diff = Math.abs(bgmList[i].duration - videoDuration);
-        if (diff < minDiff) {
-            minDiff = diff;
-            bestBgm = bgmList[i];
-        }
-    }
-    
-    console.log(`✅ 选中BGM: ${bestBgm.name} - ${bestBgm.artist}`);
-    console.log(`   BGM时长: ${bestBgm.duration.toFixed(2)}秒, 视频时长: ${videoDuration.toFixed(2)}秒`);
-    console.log(`   时长差异: ${minDiff.toFixed(2)}秒`);
-    
-    return bestBgm;
-}
+// // ==============================
+// // 8. 搜索BGM（网易云API）
+// // 功能：根据关键词从网易云搜索BGM
+// // 输入：keyword（搜索关键词）
+// // 输出：bgmList（BGM列表）
+// // ==============================
+// async function searchBgmFromNetease(keyword) {
+//     try {
+//         console.log(`🔍 正在搜索BGM: "${keyword}"`);
+        
+//         // 使用网易云API搜索
+//         const response = await axios.get('https://music.163.com/api/search/get', {
+//             params: {
+//                 s: keyword,
+//                 type: 1,  // 1=单曲
+//                 limit: 10,
+//                 offset: 0
+//             },
+//             timeout: 10000
+//         });
+        
+//         if (!response.data || !response.data.result || !response.data.result.songs) {
+//             console.warn('⚠️ 网易云API返回为空，使用默认BGM');
+//             return [];
+//         }
+        
+//         const songs = response.data.result.songs.slice(0, 5);
+//         console.log(`✅ 找到 ${songs.length} 首BGM`);
+        
+//         return songs.map(song => ({
+//             id: song.id,
+//             name: song.name,
+//             artist: song.artists?.[0]?.name || '未知',
+//             duration: song.duration / 1000,  // 转换为秒
+//             url: `https://music.163.com/song/media/outer/url?id=${song.id}.mp3`
+//         }));
+//     } catch (error) {
+//         console.warn('⚠️ 网易云API搜索失败:', error.message);
+//         return [];
+//     }
+// }
 
-// ==============================
-// 10. 混音（智能模式）
-// 功能：根据时长差异选择合适的混音方式
-// 输入：videoPath（视频路径）, audioPath（音频路径）, outputPath（输出路径）, videoDuration（视频时长）, audioDuration（音频时长）
-// 输出：无（直接输出文件）
-// ==============================
-async function mixAudioVideoSmart(videoPath, audioPath, outputPath, videoDuration, audioDuration) {
-    const timeDiff = Math.abs(videoDuration - audioDuration);
+// // ==============================
+// // 9. 选择最合适的BGM
+// // 功能：根据视频时长选择最接近的BGM
+// // 输入：bgmList（BGM列表）, videoDuration（视频时长）
+// // 输出：selectedBgm（选中的BGM）
+// // ==============================
+// function selectBestBgm(bgmList, videoDuration) {
+//     if (!bgmList || bgmList.length === 0) {
+//         console.warn('⚠️ BGM列表为空，将使用循环播放模式');
+//         return null;
+//     }
     
-    return new Promise((resolve, reject) => {
-        let ffmpegCmd = ffmpeg()
-            .input(videoPath)
-            .input(audioPath);
-        
-        // 判断是否需要循环播放
-        if (timeDiff > 2 && audioDuration < videoDuration) {
-            // BGM短于视频超过2秒，使用循环播放
-            console.log('🔄 使用循环播放模式（BGM短于视频）');
-            ffmpegCmd = ffmpegCmd.complexFilter('[1:a]aloop=loop=-1:size=2e+06[a]');
-            ffmpegCmd = ffmpegCmd.map('0:v:0').map('[a]');
-        } else {
-            // 直接混音（时长接近或BGM长于视频）
-            console.log('🎵 使用直接混音模式');
-            ffmpegCmd = ffmpegCmd.map('0:v:0').map('1:a:0');
-        }
-        
-        ffmpegCmd
-            .outputOptions([
-                '-c:v copy',      // 视频直接复制
-                '-c:a aac',       // 音频转AAC
-                '-shortest'       // 按较短的流长度输出
-            ])
-            .output(outputPath)
-            .on('start', (cmd) => {
-                console.log('🚀 FFmpeg命令:', cmd);
-            })
-            .on('progress', (progress) => {
-                console.log(`⏳ 混音进度: ${progress.percent}%`);
-            })
-            .on('end', () => {
-                console.log('✅ 音视频混音完成');
-                resolve();
-            })
-            .on('error', (err) => {
-                console.error('❌ FFmpeg混音错误:', err.message);
-                reject(err);
-            })
-            .run();
-    });
-}
+//     // 找出时长最接近视频的BGM
+//     let bestBgm = bgmList[0];
+//     let minDiff = Math.abs(bgmList[0].duration - videoDuration);
+    
+//     for (let i = 1; i < bgmList.length; i++) {
+//         const diff = Math.abs(bgmList[i].duration - videoDuration);
+//         if (diff < minDiff) {
+//             minDiff = diff;
+//             bestBgm = bgmList[i];
+//         }
+//     }
+    
+//     console.log(`✅ 选中BGM: ${bestBgm.name} - ${bestBgm.artist}`);
+//     console.log(`   BGM时长: ${bestBgm.duration.toFixed(2)}秒, 视频时长: ${videoDuration.toFixed(2)}秒`);
+//     console.log(`   时长差异: ${minDiff.toFixed(2)}秒`);
+    
+//     return bestBgm;
+// }
 
-// ==============================
-// 11. 添加BGM到视频
-// 功能：根据关键词获取BGM并混音到视频中
-// 输入：videoUrl（视频路径/URL）, bgmKeyword（BGM关键词）
-// 输出：finalVideo（最终视频路径/URL）
-// 说明：实现方案1 + 方案3的组合（循环播放 + 智能选择）
-// ==============================
-exports.addBgmToVideo = async (videoUrl, bgmKeyword) => {
-    let tempDir = null;
-    let bgmPath = null;
+// // ==============================
+// // 10. 混音（智能模式）
+// // 功能：根据时长差异选择合适的混音方式
+// // 输入：videoPath（视频路径）, audioPath（音频路径）, outputPath（输出路径）, videoDuration（视频时长）, audioDuration（音频时长）
+// // 输出：无（直接输出文件）
+// // ==============================
+// async function mixAudioVideoSmart(videoPath, audioPath, outputPath, videoDuration, audioDuration) {
+//     const timeDiff = Math.abs(videoDuration - audioDuration);
     
-    try {
-        console.log('\n🎵 开始添加BGM');
+//     return new Promise((resolve, reject) => {
+//         let ffmpegCmd = ffmpeg()
+//             .input(videoPath)
+//             .input(audioPath);
         
-        if (!videoUrl) {
-            throw new Error('视频URL不能为空');
-        }
-        if (!bgmKeyword) {
-            throw new Error('BGM关键词不能为空');
-        }
+//         // 判断是否需要循环播放
+//         if (timeDiff > 2 && audioDuration < videoDuration) {
+//             // BGM短于视频超过2秒，使用循环播放
+//             console.log('🔄 使用循环播放模式（BGM短于视频）');
+//             ffmpegCmd = ffmpegCmd.complexFilter('[1:a]aloop=loop=-1:size=2e+06[a]');
+//             ffmpegCmd = ffmpegCmd.map('0:v:0').map('[a]');
+//         } else {
+//             // 直接混音（时长接近或BGM长于视频）
+//             console.log('🎵 使用直接混音模式');
+//             ffmpegCmd = ffmpegCmd.map('0:v:0').map('1:a:0');
+//         }
         
-        console.log('🎬 视频路径:', videoUrl.substring(0, 60) + '...');
-        console.log('🎵 BGM关键词:', bgmKeyword);
-        console.log('');
+//         ffmpegCmd
+//             .outputOptions([
+//                 '-c:v copy',      // 视频直接复制
+//                 '-c:a aac',       // 音频转AAC
+//                 '-shortest'       // 按较短的流长度输出
+//             ])
+//             .output(outputPath)
+//             .on('start', (cmd) => {
+//                 console.log('🚀 FFmpeg命令:', cmd);
+//             })
+//             .on('progress', (progress) => {
+//                 console.log(`⏳ 混音进度: ${progress.percent}%`);
+//             })
+//             .on('end', () => {
+//                 console.log('✅ 音视频混音完成');
+//                 resolve();
+//             })
+//             .on('error', (err) => {
+//                 console.error('❌ FFmpeg混音错误:', err.message);
+//                 reject(err);
+//             })
+//             .run();
+//     });
+// }
+
+// // ==============================
+// // 11. 添加BGM到视频
+// // 功能：根据关键词获取BGM并混音到视频中
+// // 输入：videoUrl（视频路径/URL）, bgmKeyword（BGM关键词）
+// // 输出：finalVideo（最终视频路径/URL）
+// // 说明：实现方案1 + 方案3的组合（循环播放 + 智能选择）
+// // ==============================
+// exports.addBgmToVideo = async (videoUrl, bgmKeyword) => {
+//     let tempDir = null;
+//     let bgmPath = null;
+    
+//     try {
+//         console.log('\n🎵 开始添加BGM');
         
-        // 1. 创建临时目录
-        tempDir = path.join(__dirname, '../../temp_bgm');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-        console.log('📁 临时目录:', tempDir);
+//         if (!videoUrl) {
+//             throw new Error('视频URL不能为空');
+//         }
+//         if (!bgmKeyword) {
+//             throw new Error('BGM关键词不能为空');
+//         }
         
-        // 2. 获取视频时长
-        const videoDuration = await getVideoDuration(videoUrl);
+//         console.log('🎬 视频路径:', videoUrl.substring(0, 60) + '...');
+//         console.log('🎵 BGM关键词:', bgmKeyword);
+//         console.log('');
         
-        // 3. 搜索BGM
-        const bgmList = await searchBgmFromNetease(bgmKeyword);
+//         // 1. 创建临时目录
+//         tempDir = path.join(__dirname, '../../temp_bgm');
+//         if (!fs.existsSync(tempDir)) {
+//             fs.mkdirSync(tempDir, { recursive: true });
+//         }
+//         console.log('📁 临时目录:', tempDir);
         
-        // 4. 选择最合适的BGM
-        let selectedBgm = selectBestBgm(bgmList, videoDuration);
+//         // 2. 获取视频时长
+//         const videoDuration = await getVideoDuration(videoUrl);
         
-        // 5. 如果没有找到BGM，提示用户
-        if (!selectedBgm) {
-            console.warn('⚠️ 未找到合适的BGM，将使用循环播放模式');
-            console.log('💡 提示：请确保网络连接正常，或提供有效的BGM关键词');
-            // 返回原视频（不添加BGM）
-            return videoUrl;
-        }
+//         // 3. 搜索BGM
+//         const bgmList = await searchBgmFromNetease(bgmKeyword);
         
-        // 6. 下载BGM
-        console.log('⬇️ 开始下载BGM...');
-        bgmPath = path.join(tempDir, `bgm_${Date.now()}.mp3`);
+//         // 4. 选择最合适的BGM
+//         let selectedBgm = selectBestBgm(bgmList, videoDuration);
         
-        const response = await axiosInstance({
-            method: 'get',
-            url: selectedBgm.url,
-            responseType: 'stream'
-        });
+//         // 5. 如果没有找到BGM，提示用户
+//         if (!selectedBgm) {
+//             console.warn('⚠️ 未找到合适的BGM，将使用循环播放模式');
+//             console.log('💡 提示：请确保网络连接正常，或提供有效的BGM关键词');
+//             // 返回原视频（不添加BGM）
+//             return videoUrl;
+//         }
         
-        await new Promise((resolve, reject) => {
-            const writer = fs.createWriteStream(bgmPath);
-            response.data.pipe(writer);
-            writer.on('finish', () => {
-                console.log('✅ BGM下载完成');
-                resolve();
-            });
-            writer.on('error', (err) => {
-                console.error('❌ BGM下载失败:', err.message);
-                reject(err);
-            });
-        });
+//         // 6. 下载BGM
+//         console.log('⬇️ 开始下载BGM...');
+//         bgmPath = path.join(tempDir, `bgm_${Date.now()}.mp3`);
         
-        // 7. 获取BGM时长
-        const audioDuration = await getAudioDuration(bgmPath);
+//         const response = await axiosInstance({
+//             method: 'get',
+//             url: selectedBgm.url,
+//             responseType: 'stream'
+//         });
         
-        // 8. 确保输出目录存在
-        const outputDir = path.join(__dirname, '../../public/videos');
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
+//         await new Promise((resolve, reject) => {
+//             const writer = fs.createWriteStream(bgmPath);
+//             response.data.pipe(writer);
+//             writer.on('finish', () => {
+//                 console.log('✅ BGM下载完成');
+//                 resolve();
+//             });
+//             writer.on('error', (err) => {
+//                 console.error('❌ BGM下载失败:', err.message);
+//                 reject(err);
+//             });
+//         });
         
-        const outputPath = path.join(outputDir, `final_video_${Date.now()}.mp4`);
-        console.log('📁 输出文件:', outputPath);
+//         // 7. 获取BGM时长
+//         const audioDuration = await getAudioDuration(bgmPath);
         
-        // 9. 智能混音
-        console.log('🎵 开始混音...');
-        await mixAudioVideoSmart(videoUrl, bgmPath, outputPath, videoDuration, audioDuration);
+//         // 8. 确保输出目录存在
+//         const outputDir = path.join(__dirname, '../../public/videos');
+//         if (!fs.existsSync(outputDir)) {
+//             fs.mkdirSync(outputDir, { recursive: true });
+//         }
         
-        // 10. 清理临时文件
-        console.log('🧹 清理临时文件...');
-        if (bgmPath && fs.existsSync(bgmPath)) {
-            fs.unlinkSync(bgmPath);
-            console.log('✓ 删除BGM临时文件');
-        }
+//         const outputPath = path.join(outputDir, `final_video_${Date.now()}.mp4`);
+//         console.log('📁 输出文件:', outputPath);
         
-        // 11. 返回相对URL路径
-        const relativeUrl = `/videos/${path.basename(outputPath)}`;
-        console.log('✅ BGM添加完成');
-        console.log('🎬 最终视频URL:', relativeUrl);
-        console.log('');
+//         // 9. 智能混音
+//         console.log('🎵 开始混音...');
+//         await mixAudioVideoSmart(videoUrl, bgmPath, outputPath, videoDuration, audioDuration);
         
-        return relativeUrl;
-    } catch (error) {
-        console.error('❌ 添加BGM失败:', error.message);
+//         // 10. 清理临时文件
+//         console.log('🧹 清理临时文件...');
+//         if (bgmPath && fs.existsSync(bgmPath)) {
+//             fs.unlinkSync(bgmPath);
+//             console.log('✓ 删除BGM临时文件');
+//         }
         
-        // 清理临时文件
-        if (bgmPath && fs.existsSync(bgmPath)) {
-            try { fs.unlinkSync(bgmPath); } catch (e) {}
-        }
+//         // 11. 返回相对URL路径
+//         const relativeUrl = `/videos/${path.basename(outputPath)}`;
+//         console.log('✅ BGM添加完成');
+//         console.log('🎬 最终视频URL:', relativeUrl);
+//         console.log('');
         
-        throw error;
-    }
-};
+//         return relativeUrl;
+//     } catch (error) {
+//         console.error('❌ 添加BGM失败:', error.message);
+        
+//         // 清理临时文件
+//         if (bgmPath && fs.existsSync(bgmPath)) {
+//             try { fs.unlinkSync(bgmPath); } catch (e) {}
+//         }
+        
+//         throw error;
+//     }
+// };

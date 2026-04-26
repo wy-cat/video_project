@@ -189,7 +189,6 @@ exports.getFirstLastFrames = (imageUrls) => {
             
             firstFrames.push(imageUrls[i]);
             lastFrames.push(imageUrls[i + 1]);
-            console.log(`  帧对 ${i + 1}: 首帧=${imageUrls[i].substring(0, 50)}... 尾帧=${imageUrls[i + 1].substring(0, 50)}...`);
         }
 
         if (firstFrames.length === 0) {
